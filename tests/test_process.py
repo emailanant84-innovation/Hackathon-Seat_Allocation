@@ -6,6 +6,7 @@ from seat_allocation_app.allocator import SeatAllocator
 from seat_allocation_app.data_sources.access_stream import AccessControlStream
 from seat_allocation_app.data_sources.employee_directory import EmployeeDirectoryClient
 from seat_allocation_app.data_sources.seat_inventory import SeatInventoryClient
+from seat_allocation_app.device_usage import summarize_device_usage
 from seat_allocation_app.energy_optimizer import EnergyOptimizer
 from seat_allocation_app.iot_client import IoTDeviceClient
 from seat_allocation_app.logging_orchestrator import LoggingOrchestrator
@@ -65,3 +66,20 @@ def test_employee_directory_contains_card_id() -> None:
     employees = build_employee_directory(total_employees=3)
     assert employees[0].card_id == "CARD-E0001"
     assert employees[1].card_id == "CARD-E0002"
+
+
+def test_device_usage_summary_calculation() -> None:
+    seats = [
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Engineering", "Platform", status="occupied", occupied_by="E1"),
+        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Engineering", "Platform", status="occupied", occupied_by="E2"),
+        Seat("S-B1-F1-A-003", "B1", "F1", "A", "Engineering", "Platform"),
+    ]
+
+    rows = summarize_device_usage(seats)
+    row = next(item for item in rows if (item.building, item.floor, item.zone) == ("B1", "F1", "A"))
+    assert row.occupied_seats == 2
+    assert row.lights_on == 1
+    assert row.routers_on == 1
+    assert row.monitors_on == 2
+    assert row.desktop_cpus_on == 2
+    assert row.ac_vents_on == 1

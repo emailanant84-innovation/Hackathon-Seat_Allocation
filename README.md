@@ -14,7 +14,8 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 ## Modules
 
 - `seat_allocation_app/process_orchestrator.py`: Main workflow orchestrator.
-- `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, scrollbars, and live assignment tab.
+- `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, scrollbars, live assignment tab, and electrical usage tab.
+- `seat_allocation_app/device_usage.py`: Electrical device usage summary calculator.
 - `seat_allocation_app/logging_orchestrator.py`: Centralized activity logging orchestrator.
 - `seat_allocation_app/data_sources/access_stream.py`: Access-management live stream adapter.
 - `seat_allocation_app/data_sources/employee_directory.py`: Employee profile lookup adapter.
@@ -35,11 +36,12 @@ python main.py
 The GUI opens in fit-to-page mode by default.
 
 Tabs:
-- **Buildings** (zone occupancy bars in green for Zone A and blue for Zone B)
+- **Buildings** (for each building, the image shows 2 floors (`F1`, `F2`), 2 zones per floor, and **100 small seat squares per zone** highlighted dynamically based on occupancy)
 - **Floors**
 - **Zones**
 - **Seats**
 - **LIVE Seat Assignments** (employee details, seat, and assignment time)
+- **Electrical Usage** (lights, routers, monitors, desktop CPUs, AC vents usage summary)
 
 Each data-heavy tab includes vertical/horizontal scrollbars for browsing all rows.
 

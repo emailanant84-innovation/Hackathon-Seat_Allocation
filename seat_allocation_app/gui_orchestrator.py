@@ -5,6 +5,7 @@ from collections import Counter
 from tkinter import ttk
 from typing import Callable
 
+from seat_allocation_app.device_usage import summarize_device_usage
 from seat_allocation_app.process_orchestrator import ProcessOrchestrator
 
 
@@ -60,12 +61,14 @@ class GUIOrchestrator:
         self.zones_tab = ttk.Frame(notebook)
         self.seats_tab = ttk.Frame(notebook)
         self.live_tab = ttk.Frame(notebook)
+        self.device_tab = ttk.Frame(notebook)
 
         notebook.add(self.buildings_tab, text="Buildings")
         notebook.add(self.floors_tab, text="Floors")
         notebook.add(self.zones_tab, text="Zones")
         notebook.add(self.seats_tab, text="Seats")
         notebook.add(self.live_tab, text="LIVE Seat Assignments")
+        notebook.add(self.device_tab, text="Electrical Usage")
 
         self.building_canvas = tk.Canvas(self.buildings_tab, bg="white")
         self.building_canvas.pack(fill="both", expand=True)
@@ -96,6 +99,20 @@ class GUIOrchestrator:
                 "floor",
                 "zone",
                 "assigned_at",
+            ),
+        )
+        self.device_tree = self._create_table_with_scrollbar(
+            self.device_tab,
+            (
+                "building",
+                "floor",
+                "zone",
+                "occupied_seats",
+                "lights_on",
+                "routers_on",
+                "monitors_on",
+                "desktop_cpus_on",
+                "ac_vents_on",
             ),
         )
 
@@ -212,58 +229,93 @@ class GUIOrchestrator:
         self._refresh_zone_table(seats)
         self._refresh_seat_table(seats)
         self._refresh_live_assignment_table()
+        self._refresh_device_usage_table(seats)
 
     def _refresh_building_canvas(self, seats: list) -> None:
         self.building_canvas.delete("all")
         if not seats:
             return
 
-        width = max(self.building_canvas.winfo_width(), 900)
-        height = max(self.building_canvas.winfo_height(), 450)
-        margin_x = 40
-        panel_gap = 40
-        panel_width = (width - (2 * margin_x) - panel_gap) / 2
-        panel_height = height - 120
-        y0 = 70
+        width = max(self.building_canvas.winfo_width(), 980)
+        height = max(self.building_canvas.winfo_height(), 680)
+        margin = 20
+        gap = 30
+        building_width = (width - 2 * margin - gap) / 2
+        building_height = height - 80
+        y0 = 40
 
-        zone_stats = Counter((seat.building, seat.zone, seat.status) for seat in seats)
+        seat_map = {
+            (seat.building, seat.floor, seat.zone, int(seat.seat_id.split("-")[-1])): seat.status
+            for seat in seats
+            if seat.floor in {"F1", "F2"}
+        }
         zone_colors = {"A": "#35a853", "B": "#2f6df6"}
 
-        for index, building in enumerate(("B1", "B2")):
-            x0 = margin_x + index * (panel_width + panel_gap)
-            x1 = x0 + panel_width
-            y1 = y0 + panel_height
+        for b_idx, building in enumerate(("B1", "B2")):
+            bx0 = margin + b_idx * (building_width + gap)
+            bx1 = bx0 + building_width
+            by0 = y0
+            by1 = by0 + building_height
+            self.building_canvas.create_rectangle(bx0, by0, bx1, by1, outline="#666", width=2)
+            self.building_canvas.create_text((bx0 + bx1) / 2, by0 - 15, text=f"Building {building}", font=("Arial", 12, "bold"))
 
-            self.building_canvas.create_rectangle(x0, y0, x1, y1, fill="#f5f5f5", outline="#777")
-            self.building_canvas.create_text(
-                (x0 + x1) / 2,
-                y0 - 20,
-                text=f"Building {building}",
-                font=("Arial", 12, "bold"),
-            )
+            floor_height = (building_height - 30) / 2
+            for f_idx, floor in enumerate(("F1", "F2")):
+                fy0 = by0 + 15 + f_idx * floor_height
+                fy1 = fy0 + floor_height - 10
+                self.building_canvas.create_rectangle(bx0 + 10, fy0, bx1 - 10, fy1, outline="#999")
+                self.building_canvas.create_text(bx0 + 45, fy0 + 10, text=floor, font=("Arial", 10, "bold"))
 
-            for zone_index, zone in enumerate(("A", "B")):
-                zx0 = x0 + 35 + zone_index * (panel_width / 2)
-                zx1 = zx0 + (panel_width / 2) - 70
-                zy0 = y0 + 40
-                zy1 = y1 - 30
+                zone_gap = 10
+                zone_width = ((bx1 - bx0) - 40 - zone_gap) / 2
+                for z_idx, zone in enumerate(("A", "B")):
+                    zx0 = bx0 + 20 + z_idx * (zone_width + zone_gap)
+                    zx1 = zx0 + zone_width
+                    zy0 = fy0 + 25
+                    zy1 = fy1 - 12
 
-                occupied = zone_stats[(building, zone, "occupied")]
-                available = zone_stats[(building, zone, "available")]
-                total = occupied + available
-                ratio = occupied / total if total else 0
-                fill_top = zy1 - (zy1 - zy0) * ratio
+                    self.building_canvas.create_rectangle(zx0, zy0, zx1, zy1, outline=zone_colors[zone], width=2)
+                    self.building_canvas.create_text((zx0 + zx1) / 2, zy0 - 10, text=f"Zone {zone}", fill=zone_colors[zone])
 
-                self.building_canvas.create_rectangle(zx0, zy0, zx1, zy1, fill="#d9d9d9", outline="#999")
-                self.building_canvas.create_rectangle(zx0, fill_top, zx1, zy1, fill=zone_colors[zone], outline="")
-                self.building_canvas.create_text((zx0 + zx1) / 2, zy1 + 15, text=f"Zone {zone}")
-                self.building_canvas.create_text(
-                    (zx0 + zx1) / 2,
-                    zy0 - 12,
-                    text=f"{occupied}/{total}",
-                    fill=zone_colors[zone],
-                    font=("Arial", 10, "bold"),
-                )
+                    self._draw_seat_squares(
+                        building=building,
+                        floor=floor,
+                        zone=zone,
+                        x0=zx0 + 4,
+                        y0=zy0 + 4,
+                        x1=zx1 - 4,
+                        y1=zy1 - 4,
+                        zone_color=zone_colors[zone],
+                        seat_map=seat_map,
+                    )
+
+    def _draw_seat_squares(
+        self,
+        building: str,
+        floor: str,
+        zone: str,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        zone_color: str,
+        seat_map: dict[tuple[str, str, str, int], str],
+    ) -> None:
+        rows = 10
+        cols = 10
+        sq_w = (x1 - x0) / cols
+        sq_h = (y1 - y0) / rows
+
+        for seat_no in range(1, 101):
+            row = (seat_no - 1) // cols
+            col = (seat_no - 1) % cols
+            sx0 = x0 + col * sq_w + 1
+            sy0 = y0 + row * sq_h + 1
+            sx1 = sx0 + sq_w - 2
+            sy1 = sy0 + sq_h - 2
+            status = seat_map.get((building, floor, zone, seat_no), "available")
+            fill = zone_color if status == "occupied" else "#e6e6e6"
+            self.building_canvas.create_rectangle(sx0, sy0, sx1, sy1, fill=fill, outline="#c9c9c9")
 
     def _refresh_floor_table(self, seats: list) -> None:
         for item in self.floor_tree.get_children():
@@ -312,6 +364,27 @@ class GUIOrchestrator:
 
         for row in reversed(self.live_assignment_rows):
             self.live_tree.insert("", "end", values=row)
+
+    def _refresh_device_usage_table(self, seats: list) -> None:
+        for item in self.device_tree.get_children():
+            self.device_tree.delete(item)
+
+        for usage in summarize_device_usage(seats):
+            self.device_tree.insert(
+                "",
+                "end",
+                values=(
+                    usage.building,
+                    usage.floor,
+                    usage.zone,
+                    usage.occupied_seats,
+                    usage.lights_on,
+                    usage.routers_on,
+                    usage.monitors_on,
+                    usage.desktop_cpus_on,
+                    usage.ac_vents_on,
+                ),
+            )
 
     def run(self) -> None:
         self.root.mainloop()
