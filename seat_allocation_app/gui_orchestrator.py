@@ -3,17 +3,23 @@ from __future__ import annotations
 import tkinter as tk
 from collections import Counter
 from tkinter import ttk
+from typing import Callable
 
 from seat_allocation_app.process_orchestrator import ProcessOrchestrator
 
 
 class GUIOrchestrator:
-    """Top-level UI orchestrator that simulates live access events every 3 seconds."""
+    """Top-level UI orchestrator with run/pause/reset simulation controls."""
 
-    def __init__(self, process_orchestrator: ProcessOrchestrator, employee_ids: list[str]) -> None:
-        self.process_orchestrator = process_orchestrator
-        self.employee_ids = employee_ids
+    def __init__(
+        self,
+        bootstrap_callback: Callable[[], tuple[ProcessOrchestrator, list[str], dict[str, str]]],
+    ) -> None:
+        self._bootstrap_callback = bootstrap_callback
+        self.process_orchestrator, self.employee_ids, self.card_by_employee = self._bootstrap_callback()
         self.employee_index = 0
+        self.is_running = False
+        self._after_id: str | None = None
 
         self.root = tk.Tk()
         self.root.title("Live Seat Allocation Control Tower")
@@ -80,17 +86,55 @@ class GUIOrchestrator:
 
         controls = ttk.Frame(self.root)
         controls.pack(fill="x", padx=10, pady=5)
-        ttk.Button(controls, text="Inject Event Now", command=self._inject_access_event).pack(side="left")
+        self.toggle_button = ttk.Button(controls, text="Run Simulation", command=self._toggle_running)
+        self.toggle_button.pack(side="left")
+        ttk.Button(controls, text="Inject Event Now", command=self.inject_single_event).pack(side="left", padx=8)
+        ttk.Button(controls, text="Reset Simulation", command=self.reset_simulation).pack(side="left", padx=8)
         ttk.Label(controls, text="Automatic simulation interval: 3 seconds").pack(side="left", padx=15)
+
+    def _toggle_running(self) -> None:
+        if self.is_running:
+            self.pause_simulation()
+        else:
+            self.start_simulation()
+
+    def start_simulation(self) -> None:
+        self.is_running = True
+        self.toggle_button.configure(text="Pause Simulation")
+        self._schedule_next_tick(0)
+
+    def pause_simulation(self) -> None:
+        self.is_running = False
+        self.toggle_button.configure(text="Run Simulation")
+        if self._after_id is not None:
+            self.root.after_cancel(self._after_id)
+            self._after_id = None
+
+    def reset_simulation(self) -> None:
+        self.pause_simulation()
+        self.process_orchestrator, self.employee_ids, self.card_by_employee = self._bootstrap_callback()
+        self.employee_index = 0
+        self.latest_assignment_var.set("Simulation reset. Click Run Simulation to start demo.")
+        self._refresh_views()
+
+    def _schedule_next_tick(self, delay_ms: int = 3000) -> None:
+        if self.is_running:
+            self._after_id = self.root.after(delay_ms, self._simulation_tick)
+
+    def _simulation_tick(self) -> None:
+        if not self.is_running:
+            return
+        self.inject_single_event()
+        self._schedule_next_tick(3000)
 
     def _next_employee_id(self) -> str:
         employee_id = self.employee_ids[self.employee_index % len(self.employee_ids)]
         self.employee_index += 1
         return employee_id
 
-    def _inject_access_event(self) -> None:
+    def inject_single_event(self) -> None:
         employee_id = self._next_employee_id()
-        card_id = f"CARD-{employee_id}"
+        card_id = self.card_by_employee.get(employee_id, f"CARD-{employee_id}")
         self.process_orchestrator.access_stream.publish(employee_id, card_id)
         assignments = self.process_orchestrator.run_once()
         assignment = assignments[-1] if assignments else None
@@ -104,7 +148,6 @@ class GUIOrchestrator:
             self.latest_assignment_var.set(f"No seat allocation produced for {employee_id}.")
 
         self._refresh_views()
-        self.root.after(3000, self._inject_access_event)
 
     def _refresh_views(self) -> None:
         seats = self.process_orchestrator.seat_inventory.all_seats()
@@ -177,5 +220,4 @@ class GUIOrchestrator:
             )
 
     def run(self) -> None:
-        self.root.after(3000, self._inject_access_event)
         self.root.mainloop()

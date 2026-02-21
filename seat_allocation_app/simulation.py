@@ -39,6 +39,7 @@ def build_employee_directory(total_employees: int = 2500) -> list[Employee]:
         employees.append(
             Employee(
                 employee_id=employee_id,
+                card_id=f"CARD-{employee_id}",
                 name=f"Employee {i}",
                 email=f"employee{i}@corp.com",
                 phone=f"+1202555{i:04d}",

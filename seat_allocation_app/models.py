@@ -11,6 +11,7 @@ SeatStatus = Literal["available", "occupied"]
 @dataclass(slots=True)
 class Employee:
     employee_id: str
+    card_id: str
     name: str
     email: str
     phone: str
