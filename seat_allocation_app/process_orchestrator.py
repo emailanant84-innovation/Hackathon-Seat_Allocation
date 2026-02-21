@@ -37,7 +37,7 @@ class ProcessOrchestrator:
             )
             return None
 
-        candidates = self.seat_inventory.seats_for_department(employee.department)
+        candidates = self.seat_inventory.available_seats()
         assignment = self.seat_allocator.select_seat(
             employee,
             candidates,

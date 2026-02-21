@@ -17,16 +17,18 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 
 ## Seat allocation algorithm
 
-The allocator uses a **beam-search strategy** with a learning cache:
+The allocator uses a **utilization-first heuristic scoring strategy**:
 - Priority order for seat selection: **same team**, then **same department**, then **same zone density**.
-- Learning: successful placements are cached by `(department, team)` and reused for faster future decisions.
-- Strict locality rule: once a team+department has an occupied location, future members of that same team+department are constrained to the same `(building, floor, zone)`.
-- Zone-mix rule: at most **2 different departments** can coexist in the same zone.
+- Same-team together: allocator strongly anchors an employee to zones where the same team already sits.
+- Department cohesion: teams from the same department are preferentially placed in the same zone.
+- Controlled mixing: different departments can share a zone if team and department cohesion priorities stay intact.
+- Building/floor preference: allocator uses different floor/building only when local options are less suitable.
+- Utilization-first: when possible, allocator consolidates occupancy into already active zones to maximize seat utilization and improve energy efficiency.
 
 ## Modules
 
 - `seat_allocation_app/process_orchestrator.py`: Main workflow orchestrator.
-- `seat_allocation_app/allocator.py`: Beam-search seat allocator with learning cache.
+- `seat_allocation_app/allocator.py`: Utilization-first seat allocator with team/department cohesion heuristics.
 - `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, scrollbars, live assignment tab, live reasoning tab, and electrical usage tab.
 - `seat_allocation_app/device_usage.py`: Electrical device usage summary calculator.
 - `seat_allocation_app/logging_orchestrator.py`: Centralized activity logging orchestrator.

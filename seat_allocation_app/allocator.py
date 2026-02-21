@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import datetime
 
 from seat_allocation_app.models import Assignment, Employee, Seat
@@ -8,11 +9,7 @@ from seat_allocation_app.models import Assignment, Employee, Seat
 
 @dataclass(slots=True)
 class SeatAllocator:
-    """Beam-search allocator with learning cache and strict team/dept locality guarantees."""
-
-    beam_width: int = 16
-    learned_location_by_team: dict[tuple[str, str], tuple[str, str, str]] = field(default_factory=dict)
-    seat_success_score: dict[tuple[str, str], dict[str, int]] = field(default_factory=dict)
+    """Utilization-first allocator with team/department cohesion heuristics."""
 
     def select_seat(
         self,
@@ -23,127 +20,91 @@ class SeatAllocator:
         if not candidate_seats:
             return None
 
-        team_key = (employee.department, employee.team)
-        required_location = self._required_location(team_key, all_seats)
-        locality_reason = ""
-        if required_location:
-            candidate_seats = [
-                seat
-                for seat in candidate_seats
-                if (seat.building, seat.floor, seat.zone) == required_location
-            ]
-            locality_reason = (
-                f"strict locality for {employee.department}/{employee.team} -> "
-                f"{required_location[0]}/{required_location[1]}/{required_location[2]}"
-            )
-            if not candidate_seats:
-                return None
+        occupied = [seat for seat in all_seats if seat.status == "occupied"]
+        occupancy_ratio = len(occupied) / len(all_seats) if all_seats else 0.0
 
-        candidate_seats = self._enforce_zone_department_limit(candidate_seats, all_seats, employee.department)
-        if not candidate_seats:
+        team_zone_counts: Counter[tuple[str, str, str]] = Counter()
+        dept_zone_counts: Counter[tuple[str, str, str]] = Counter()
+        zone_load: Counter[tuple[str, str, str]] = Counter()
+        zone_dept_counts: dict[tuple[str, str, str], Counter[str]] = defaultdict(Counter)
+
+        for seat in occupied:
+            zone_key = (seat.building, seat.floor, seat.zone)
+            zone_load[zone_key] += 1
+            zone_dept_counts[zone_key][seat.department] += 1
+            if seat.team_cluster == employee.team and seat.department == employee.department:
+                team_zone_counts[zone_key] += 1
+            if seat.department == employee.department:
+                dept_zone_counts[zone_key] += 1
+
+        team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
+        dept_anchor = dept_zone_counts.most_common(1)[0][0] if dept_zone_counts else None
+
+        best_seat = None
+        best_score = None
+
+        consolidation_weight = 8 if occupancy_ratio < 0.8 else 4
+
+        for seat in candidate_seats:
+            zone_key = (seat.building, seat.floor, seat.zone)
+            same_team_zone = team_zone_counts.get(zone_key, 0)
+            same_dept_zone = dept_zone_counts.get(zone_key, 0)
+            zone_occupancy = zone_load.get(zone_key, 0)
+            same_seat_department = int(seat.department == employee.department)
+
+            score = 0
+
+            # 1) same team together (highest priority)
+            score += same_team_zone * 1000
+            if team_anchor and zone_key == team_anchor:
+                score += 5000
+
+            # 2) teams in same department together in same zone
+            score += same_dept_zone * 300
+            if dept_anchor and zone_key == dept_anchor:
+                score += 1500
+
+            # Prefer zones that already host the department (while allowing mixed departments)
+            if zone_dept_counts[zone_key].get(employee.department, 0) > 0:
+                score += 400
+
+            # 3) maximize utilization (consolidate occupancy)
+            score += zone_occupancy * consolidation_weight
+
+            # Prefer designated seat department if tie-ish
+            score += same_seat_department * 40
+
+            # only go to different floor/building when needed (soft penalty)
+            if team_anchor and zone_key[:2] != team_anchor[:2]:
+                score -= 120
+            if dept_anchor and zone_key[:2] != dept_anchor[:2]:
+                score -= 50
+
+            # tiny deterministic tiebreak for stability
+            suffix = seat.seat_id.split("-")[-1]
+            numeric_suffix = int(suffix) if suffix.isdigit() else 0
+            score += numeric_suffix * -0.001
+
+            if best_score is None or score > best_score:
+                best_score = score
+                best_seat = seat
+
+        if not best_seat:
             return None
-
-        ranked = self._beam_search_ranked_candidates(team_key, candidate_seats, all_seats)
-        if not ranked:
-            return None
-
-        selected = ranked[0]
-        self.learned_location_by_team[team_key] = (
-            selected.building,
-            selected.floor,
-            selected.zone,
-        )
-        self.seat_success_score.setdefault(team_key, {})
-        self.seat_success_score[team_key][selected.seat_id] = (
-            self.seat_success_score[team_key].get(selected.seat_id, 0) + 1
-        )
 
         reasoning = (
-            "Beam search ranking: same_team > same_department > same_zone_density; "
-            f"selected={selected.seat_id}; {locality_reason or 'new locality learned'}; "
-            "zone has max 2 departments"
+            "Utilization-first scoring: team_together > department_zone_together > "
+            "zone_consolidation; selected="
+            f"{best_seat.seat_id}; occupancy_ratio={occupancy_ratio:.2f}; "
+            f"team_anchor={team_anchor}; dept_anchor={dept_anchor}"
         )
 
         return Assignment(
             employee_id=employee.employee_id,
-            seat_id=selected.seat_id,
-            building=selected.building,
-            floor=selected.floor,
-            zone=selected.zone,
+            seat_id=best_seat.seat_id,
+            building=best_seat.building,
+            floor=best_seat.floor,
+            zone=best_seat.zone,
             reasoning=reasoning,
             assigned_at=datetime.utcnow(),
         )
-
-    def _required_location(
-        self,
-        team_key: tuple[str, str],
-        all_seats: list[Seat],
-    ) -> tuple[str, str, str] | None:
-        if team_key in self.learned_location_by_team:
-            return self.learned_location_by_team[team_key]
-
-        dept, team = team_key
-        for seat in all_seats:
-            if (
-                seat.status == "occupied"
-                and seat.department == dept
-                and seat.team_cluster == team
-            ):
-                location = (seat.building, seat.floor, seat.zone)
-                self.learned_location_by_team[team_key] = location
-                return location
-        return None
-
-    def _enforce_zone_department_limit(
-        self,
-        candidates: list[Seat],
-        all_seats: list[Seat],
-        employee_department: str,
-    ) -> list[Seat]:
-        zone_departments: dict[tuple[str, str, str], set[str]] = {}
-        for seat in all_seats:
-            if seat.status == "occupied":
-                key = (seat.building, seat.floor, seat.zone)
-                zone_departments.setdefault(key, set()).add(seat.department)
-
-        filtered: list[Seat] = []
-        for seat in candidates:
-            key = (seat.building, seat.floor, seat.zone)
-            depts = zone_departments.get(key, set())
-            if employee_department in depts or len(depts) < 2:
-                filtered.append(seat)
-        return filtered
-
-    def _beam_search_ranked_candidates(
-        self,
-        team_key: tuple[str, str],
-        candidates: list[Seat],
-        all_seats: list[Seat],
-    ) -> list[Seat]:
-        dept, team = team_key
-        zone_load = self._zone_load(all_seats)
-        learned_scores = self.seat_success_score.get(team_key, {})
-
-        def score(seat: Seat) -> tuple[int, int, int, int]:
-            same_team = int(seat.team_cluster == team)
-            same_department = int(seat.department == dept)
-            same_zone_density = zone_load.get((seat.building, seat.floor, seat.zone), 0)
-            learned = learned_scores.get(seat.seat_id, 0)
-            return (same_team, same_department, same_zone_density, learned)
-
-        frontier = sorted(candidates, key=score, reverse=True)
-        beam = frontier[: self.beam_width]
-        if len(frontier) > self.beam_width:
-            next_slice = frontier[self.beam_width : self.beam_width * 2]
-            beam = sorted(beam + next_slice, key=score, reverse=True)[: self.beam_width]
-
-        return beam
-
-    @staticmethod
-    def _zone_load(all_seats: list[Seat]) -> dict[tuple[str, str, str], int]:
-        load: dict[tuple[str, str, str], int] = {}
-        for seat in all_seats:
-            if seat.status == "occupied":
-                key = (seat.building, seat.floor, seat.zone)
-                load[key] = load.get(key, 0) + 1
-        return load

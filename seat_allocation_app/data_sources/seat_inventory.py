@@ -9,12 +9,11 @@ class SeatInventoryClient:
     def __init__(self, seats: list[Seat]) -> None:
         self._seats = {seat.seat_id: seat for seat in seats}
 
+    def available_seats(self) -> list[Seat]:
+        return [seat for seat in self._seats.values() if seat.status == "available"]
+
     def seats_for_department(self, department: str) -> list[Seat]:
-        return [
-            seat
-            for seat in self._seats.values()
-            if seat.department == department and seat.status == "available"
-        ]
+        return [seat for seat in self._seats.values() if seat.department == department and seat.status == "available"]
 
     def occupied_zone_counts(self) -> Counter[tuple[str, str, str]]:
         counts: Counter[tuple[str, str, str]] = Counter()

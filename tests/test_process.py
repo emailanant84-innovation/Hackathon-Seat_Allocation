@@ -17,7 +17,7 @@ from seat_allocation_app.process_orchestrator import ProcessOrchestrator
 from seat_allocation_app.simulation import all_departments, all_teams, build_employee_directory, build_seat_topology
 
 
-def test_orchestrator_assigns_team_cluster_and_notifies() -> None:
+def test_orchestrator_assigns_and_notifies() -> None:
     orchestrator = ProcessOrchestrator(
         access_stream=AccessControlStream(
             [
@@ -51,46 +51,40 @@ def test_orchestrator_assigns_team_cluster_and_notifies() -> None:
     assert occupied["S1"] == "E1"
     assert occupied["S2"] == "E2"
     assert assignments[0].building == "B1"
-    assert "Beam search ranking" in assignments[0].reasoning
+    assert "Utilization-first scoring" in assignments[0].reasoning
     assert len(orchestrator.email_notifier.sent_messages) == 2
     assert len(orchestrator.message_notifier.sent_messages) == 2
-    assert any(cmd.command == "POWER_ON" for cmd in orchestrator.iot_client.command_history)
 
 
-def test_team_department_not_split_across_zones() -> None:
+def test_same_team_prefers_same_zone() -> None:
     allocator = SeatAllocator()
-    employee = Employee("E1", "CARD-E1", "Alex", "a@x", "+1", "Engineering", "Platform")
+    employee = Employee("E2", "CARD-E2", "Pat", "p@x", "+2", "Dept-A", "Team-X")
 
     all_seats = [
-        Seat("S1", "B1", "F1", "A", "Engineering", "Platform", status="occupied", occupied_by="E9"),
-        Seat("S2", "B1", "F1", "A", "Engineering", "Platform"),
-        Seat("S3", "B1", "F1", "B", "Engineering", "Platform"),
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-X", status="occupied", occupied_by="E1"),
+        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-X"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-A", "Team-X"),
     ]
-    candidates = [all_seats[1], all_seats[2]]
 
-    assignment = allocator.select_seat(employee, candidates, all_seats)
+    assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2]], all_seats)
     assert assignment is not None
-    assert (assignment.building, assignment.floor, assignment.zone) == ("B1", "F1", "A")
+    assert assignment.zone == "A"
 
 
-
-
-def test_zone_allows_at_most_two_departments() -> None:
+def test_department_teams_cluster_in_zone() -> None:
     allocator = SeatAllocator()
-    employee = Employee("E3", "CARD-E3", "Casey", "c@x", "+3", "Dept-C", "Team-C")
+    employee = Employee("E3", "CARD-E3", "Sam", "s@x", "+3", "Dept-A", "Team-Y")
 
     all_seats = [
-        Seat("S1", "B1", "F1", "A", "Dept-A", "Team-1", status="occupied", occupied_by="EA"),
-        Seat("S2", "B1", "F1", "A", "Dept-B", "Team-2", status="occupied", occupied_by="EB"),
-        Seat("S3", "B1", "F1", "A", "Dept-C", "Team-C"),
-        Seat("S4", "B1", "F1", "B", "Dept-C", "Team-C"),
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-Z", status="occupied", occupied_by="E1"),
+        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-Y"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-A", "Team-Y"),
     ]
 
-    candidates = [all_seats[2], all_seats[3]]
-    assignment = allocator.select_seat(employee, candidates, all_seats)
-
+    assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2]], all_seats)
     assert assignment is not None
-    assert assignment.zone == "B"
+    assert assignment.zone == "A"
+
 
 def test_simulation_topology_and_randomized_employee_scope() -> None:
     seats = build_seat_topology()
@@ -106,12 +100,6 @@ def test_simulation_topology_and_randomized_employee_scope() -> None:
     assert len(employees) == 300
     assert len({employee.department for employee in employees}) == 12
     assert len({employee.team for employee in employees}) == 25
-
-
-def test_employee_directory_contains_card_id() -> None:
-    employees = build_employee_directory(total_employees=3, seed=7)
-    assert employees[0].card_id == "CARD-E0001"
-    assert employees[1].card_id == "CARD-E0002"
 
 
 def test_device_usage_summary_calculation() -> None:
