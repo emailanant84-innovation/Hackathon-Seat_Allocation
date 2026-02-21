@@ -14,7 +14,7 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 ## Modules
 
 - `seat_allocation_app/process_orchestrator.py`: Main workflow orchestrator.
-- `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls.
+- `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, scrollbars, and live assignment tab.
 - `seat_allocation_app/logging_orchestrator.py`: Centralized activity logging orchestrator.
 - `seat_allocation_app/data_sources/access_stream.py`: Access-management live stream adapter.
 - `seat_allocation_app/data_sources/employee_directory.py`: Employee profile lookup adapter.
@@ -32,7 +32,17 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 python main.py
 ```
 
-The GUI contains separate tabs for Buildings, Floors, Zones, and Seats with real-time status updates.
+The GUI opens in fit-to-page mode by default.
+
+Tabs:
+- **Buildings** (zone occupancy bars in green for Zone A and blue for Zone B)
+- **Floors**
+- **Zones**
+- **Seats**
+- **LIVE Seat Assignments** (employee details, seat, and assignment time)
+
+Each data-heavy tab includes vertical/horizontal scrollbars for browsing all rows.
+
 Use buttons to:
 - **Run Simulation** (auto event injection every 3 seconds)
 - **Pause Simulation**

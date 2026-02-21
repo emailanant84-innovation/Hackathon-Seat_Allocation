@@ -20,15 +20,26 @@ class GUIOrchestrator:
         self.employee_index = 0
         self.is_running = False
         self._after_id: str | None = None
+        self._last_seats_snapshot: list = []
 
         self.root = tk.Tk()
         self.root.title("Live Seat Allocation Control Tower")
-        self.root.geometry("1200x800")
+        self.root.geometry("1280x900")
+        self._fit_to_page()
 
         self.latest_assignment_var = tk.StringVar(value="Waiting for first access event...")
+        self.live_assignment_rows: list[tuple[str, ...]] = []
 
         self._build_layout()
         self._refresh_views()
+
+    def _fit_to_page(self) -> None:
+        try:
+            self.root.state("zoomed")
+        except tk.TclError:
+            screen_w = self.root.winfo_screenwidth()
+            screen_h = self.root.winfo_screenheight()
+            self.root.geometry(f"{screen_w}x{screen_h}+0+0")
 
     def _build_layout(self) -> None:
         header = ttk.Frame(self.root)
@@ -48,41 +59,45 @@ class GUIOrchestrator:
         self.floors_tab = ttk.Frame(notebook)
         self.zones_tab = ttk.Frame(notebook)
         self.seats_tab = ttk.Frame(notebook)
+        self.live_tab = ttk.Frame(notebook)
 
         notebook.add(self.buildings_tab, text="Buildings")
         notebook.add(self.floors_tab, text="Floors")
         notebook.add(self.zones_tab, text="Zones")
         notebook.add(self.seats_tab, text="Seats")
+        notebook.add(self.live_tab, text="LIVE Seat Assignments")
 
         self.building_canvas = tk.Canvas(self.buildings_tab, bg="white")
         self.building_canvas.pack(fill="both", expand=True)
+        self.building_canvas.bind("<Configure>", self._on_canvas_resize)
 
-        self.floor_tree = ttk.Treeview(
+        self.floor_tree = self._create_table_with_scrollbar(
             self.floors_tab,
-            columns=("building", "floor", "occupied", "available"),
-            show="headings",
+            ("building", "floor", "occupied", "available"),
         )
-        for col in ("building", "floor", "occupied", "available"):
-            self.floor_tree.heading(col, text=col.title())
-        self.floor_tree.pack(fill="both", expand=True)
-
-        self.zone_tree = ttk.Treeview(
+        self.zone_tree = self._create_table_with_scrollbar(
             self.zones_tab,
-            columns=("building", "floor", "zone", "occupied", "available"),
-            show="headings",
+            ("building", "floor", "zone", "occupied", "available"),
         )
-        for col in ("building", "floor", "zone", "occupied", "available"):
-            self.zone_tree.heading(col, text=col.title())
-        self.zone_tree.pack(fill="both", expand=True)
-
-        self.seat_tree = ttk.Treeview(
+        self.seat_tree = self._create_table_with_scrollbar(
             self.seats_tab,
-            columns=("seat_id", "building", "floor", "zone", "status", "occupied_by"),
-            show="headings",
+            ("seat_id", "building", "floor", "zone", "status", "occupied_by"),
         )
-        for col in ("seat_id", "building", "floor", "zone", "status", "occupied_by"):
-            self.seat_tree.heading(col, text=col.title())
-        self.seat_tree.pack(fill="both", expand=True)
+        self.live_tree = self._create_table_with_scrollbar(
+            self.live_tab,
+            (
+                "employee_id",
+                "employee_name",
+                "card_id",
+                "department",
+                "team",
+                "seat_id",
+                "building",
+                "floor",
+                "zone",
+                "assigned_at",
+            ),
+        )
 
         controls = ttk.Frame(self.root)
         controls.pack(fill="x", padx=10, pady=5)
@@ -91,6 +106,30 @@ class GUIOrchestrator:
         ttk.Button(controls, text="Inject Event Now", command=self.inject_single_event).pack(side="left", padx=8)
         ttk.Button(controls, text="Reset Simulation", command=self.reset_simulation).pack(side="left", padx=8)
         ttk.Label(controls, text="Automatic simulation interval: 3 seconds").pack(side="left", padx=15)
+
+    def _create_table_with_scrollbar(self, parent: ttk.Frame, columns: tuple[str, ...]) -> ttk.Treeview:
+        container = ttk.Frame(parent)
+        container.pack(fill="both", expand=True)
+
+        tree = ttk.Treeview(container, columns=columns, show="headings")
+        for col in columns:
+            tree.heading(col, text=col.replace("_", " ").title())
+            tree.column(col, width=140, minwidth=110, anchor="center")
+
+        y_scrollbar = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
+        x_scrollbar = ttk.Scrollbar(container, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=y_scrollbar.set, xscrollcommand=x_scrollbar.set)
+
+        tree.grid(row=0, column=0, sticky="nsew")
+        y_scrollbar.grid(row=0, column=1, sticky="ns")
+        x_scrollbar.grid(row=1, column=0, sticky="ew")
+
+        container.rowconfigure(0, weight=1)
+        container.columnconfigure(0, weight=1)
+        return tree
+
+    def _on_canvas_resize(self, _event: tk.Event) -> None:
+        self._refresh_building_canvas(self._last_seats_snapshot)
 
     def _toggle_running(self) -> None:
         if self.is_running:
@@ -114,6 +153,7 @@ class GUIOrchestrator:
         self.pause_simulation()
         self.process_orchestrator, self.employee_ids, self.card_by_employee = self._bootstrap_callback()
         self.employee_index = 0
+        self.live_assignment_rows = []
         self.latest_assignment_var.set("Simulation reset. Click Run Simulation to start demo.")
         self._refresh_views()
 
@@ -140,6 +180,21 @@ class GUIOrchestrator:
         assignment = assignments[-1] if assignments else None
 
         if assignment:
+            employee = self.process_orchestrator.employee_directory.get_employee(assignment.employee_id)
+            self.live_assignment_rows.append(
+                (
+                    assignment.employee_id,
+                    employee.name if employee else "Unknown",
+                    card_id,
+                    employee.department if employee else "Unknown",
+                    employee.team if employee else "Unknown",
+                    assignment.seat_id,
+                    assignment.building,
+                    assignment.floor,
+                    assignment.zone,
+                    assignment.assigned_at.strftime("%Y-%m-%d %H:%M:%S"),
+                )
+            )
             self.latest_assignment_var.set(
                 f"Assigned {assignment.employee_id} -> {assignment.seat_id} "
                 f"({assignment.building}/{assignment.floor}/{assignment.zone})"
@@ -151,30 +206,64 @@ class GUIOrchestrator:
 
     def _refresh_views(self) -> None:
         seats = self.process_orchestrator.seat_inventory.all_seats()
+        self._last_seats_snapshot = seats
         self._refresh_building_canvas(seats)
         self._refresh_floor_table(seats)
         self._refresh_zone_table(seats)
         self._refresh_seat_table(seats)
+        self._refresh_live_assignment_table()
 
     def _refresh_building_canvas(self, seats: list) -> None:
         self.building_canvas.delete("all")
-        building_stats = Counter((seat.building, seat.status) for seat in seats)
+        if not seats:
+            return
 
-        for i, building in enumerate(("B1", "B2")):
-            x0, y0 = 80 + i * 500, 100
-            x1, y1 = x0 + 300, y0 + 500
-            self.building_canvas.create_rectangle(x0, y0, x1, y1, fill="#f3f3f3", outline="black")
-            self.building_canvas.create_text((x0 + x1) / 2, 70, text=f"Building {building}", font=("Arial", 12, "bold"))
+        width = max(self.building_canvas.winfo_width(), 900)
+        height = max(self.building_canvas.winfo_height(), 450)
+        margin_x = 40
+        panel_gap = 40
+        panel_width = (width - (2 * margin_x) - panel_gap) / 2
+        panel_height = height - 120
+        y0 = 70
 
-            occupied = building_stats[(building, "occupied")]
-            available = building_stats[(building, "available")]
-            total = occupied + available
-            ratio = occupied / total if total else 0
+        zone_stats = Counter((seat.building, seat.zone, seat.status) for seat in seats)
+        zone_colors = {"A": "#35a853", "B": "#2f6df6"}
 
-            bar_height = int((y1 - y0 - 80) * ratio)
-            self.building_canvas.create_rectangle(x1 + 20, y1 - 20 - bar_height, x1 + 60, y1 - 20, fill="green")
-            self.building_canvas.create_rectangle(x1 + 20, y0 + 20, x1 + 60, y1 - 20 - bar_height, fill="lightgray")
-            self.building_canvas.create_text(x1 + 40, y1 + 10, text=f"{occupied}/{total}")
+        for index, building in enumerate(("B1", "B2")):
+            x0 = margin_x + index * (panel_width + panel_gap)
+            x1 = x0 + panel_width
+            y1 = y0 + panel_height
+
+            self.building_canvas.create_rectangle(x0, y0, x1, y1, fill="#f5f5f5", outline="#777")
+            self.building_canvas.create_text(
+                (x0 + x1) / 2,
+                y0 - 20,
+                text=f"Building {building}",
+                font=("Arial", 12, "bold"),
+            )
+
+            for zone_index, zone in enumerate(("A", "B")):
+                zx0 = x0 + 35 + zone_index * (panel_width / 2)
+                zx1 = zx0 + (panel_width / 2) - 70
+                zy0 = y0 + 40
+                zy1 = y1 - 30
+
+                occupied = zone_stats[(building, zone, "occupied")]
+                available = zone_stats[(building, zone, "available")]
+                total = occupied + available
+                ratio = occupied / total if total else 0
+                fill_top = zy1 - (zy1 - zy0) * ratio
+
+                self.building_canvas.create_rectangle(zx0, zy0, zx1, zy1, fill="#d9d9d9", outline="#999")
+                self.building_canvas.create_rectangle(zx0, fill_top, zx1, zy1, fill=zone_colors[zone], outline="")
+                self.building_canvas.create_text((zx0 + zx1) / 2, zy1 + 15, text=f"Zone {zone}")
+                self.building_canvas.create_text(
+                    (zx0 + zx1) / 2,
+                    zy0 - 12,
+                    text=f"{occupied}/{total}",
+                    fill=zone_colors[zone],
+                    font=("Arial", 10, "bold"),
+                )
 
     def _refresh_floor_table(self, seats: list) -> None:
         for item in self.floor_tree.get_children():
@@ -197,15 +286,13 @@ class GUIOrchestrator:
                 for zone in ("A", "B"):
                     occupied = zones[(building, floor, zone, "occupied")]
                     available = zones[(building, floor, zone, "available")]
-                    self.zone_tree.insert(
-                        "", "end", values=(building, floor, zone, occupied, available)
-                    )
+                    self.zone_tree.insert("", "end", values=(building, floor, zone, occupied, available))
 
     def _refresh_seat_table(self, seats: list) -> None:
         for item in self.seat_tree.get_children():
             self.seat_tree.delete(item)
 
-        for seat in seats[:250]:
+        for seat in seats:
             self.seat_tree.insert(
                 "",
                 "end",
@@ -218,6 +305,13 @@ class GUIOrchestrator:
                     seat.occupied_by or "-",
                 ),
             )
+
+    def _refresh_live_assignment_table(self) -> None:
+        for item in self.live_tree.get_children():
+            self.live_tree.delete(item)
+
+        for row in reversed(self.live_assignment_rows):
+            self.live_tree.insert("", "end", values=row)
 
     def run(self) -> None:
         self.root.mainloop()
