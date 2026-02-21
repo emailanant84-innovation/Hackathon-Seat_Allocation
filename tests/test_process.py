@@ -51,6 +51,7 @@ def test_orchestrator_assigns_team_cluster_and_notifies() -> None:
     assert occupied["S1"] == "E1"
     assert occupied["S2"] == "E2"
     assert assignments[0].building == "B1"
+    assert "Beam search ranking" in assignments[0].reasoning
     assert len(orchestrator.email_notifier.sent_messages) == 2
     assert len(orchestrator.message_notifier.sent_messages) == 2
     assert any(cmd.command == "POWER_ON" for cmd in orchestrator.iot_client.command_history)
@@ -74,12 +75,13 @@ def test_team_department_not_split_across_zones() -> None:
 
 def test_simulation_topology_has_2000_seats_and_scale_dimensions() -> None:
     seats = build_seat_topology()
-    employees = build_employee_directory(total_employees=2500)
+    employees = build_employee_directory()
 
     assert len(seats) == 2000
     assert len({seat.department for seat in seats}) == 20
     assert len({seat.team_cluster for seat in seats}) == 100
     assert len({employee.department for employee in employees}) == 20
+    assert len(employees) == 1000
     assert len({employee.team for employee in employees}) == 100
 
 

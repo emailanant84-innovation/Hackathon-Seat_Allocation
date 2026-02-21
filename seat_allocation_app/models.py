@@ -45,6 +45,7 @@ class Assignment:
     building: str
     floor: str
     zone: str
+    reasoning: str
     assigned_at: datetime = field(default_factory=datetime.utcnow)
 
 

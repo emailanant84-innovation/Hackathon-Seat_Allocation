@@ -25,12 +25,17 @@ class SeatAllocator:
 
         team_key = (employee.department, employee.team)
         required_location = self._required_location(team_key, all_seats)
+        locality_reason = ""
         if required_location:
             candidate_seats = [
                 seat
                 for seat in candidate_seats
                 if (seat.building, seat.floor, seat.zone) == required_location
             ]
+            locality_reason = (
+                f"strict locality for {employee.department}/{employee.team} -> "
+                f"{required_location[0]}/{required_location[1]}/{required_location[2]}"
+            )
             if not candidate_seats:
                 return None
 
@@ -49,12 +54,18 @@ class SeatAllocator:
             self.seat_success_score[team_key].get(selected.seat_id, 0) + 1
         )
 
+        reasoning = (
+            "Beam search ranking: same_team > same_department > same_zone_density; "
+            f"selected={selected.seat_id}; {locality_reason or 'new locality learned'}"
+        )
+
         return Assignment(
             employee_id=employee.employee_id,
             seat_id=selected.seat_id,
             building=selected.building,
             floor=selected.floor,
             zone=selected.zone,
+            reasoning=reasoning,
             assigned_at=datetime.utcnow(),
         )
 
@@ -89,16 +100,14 @@ class SeatAllocator:
         learned_scores = self.seat_success_score.get(team_key, {})
 
         def score(seat: Seat) -> tuple[int, int, int, int]:
-            same_team = int(seat.team_cluster == team)      # priority #1
-            same_department = int(seat.department == dept)  # priority #2
-            same_zone_density = zone_load.get((seat.building, seat.floor, seat.zone), 0)  # priority #3
+            same_team = int(seat.team_cluster == team)
+            same_department = int(seat.department == dept)
+            same_zone_density = zone_load.get((seat.building, seat.floor, seat.zone), 0)
             learned = learned_scores.get(seat.seat_id, 0)
             return (same_team, same_department, same_zone_density, learned)
 
         frontier = sorted(candidates, key=score, reverse=True)
         beam = frontier[: self.beam_width]
-
-        # Expand search horizon with one more beam step to simulate informed search.
         if len(frontier) > self.beam_width:
             next_slice = frontier[self.beam_width : self.beam_width * 2]
             beam = sorted(beam + next_slice, key=score, reverse=True)[: self.beam_width]

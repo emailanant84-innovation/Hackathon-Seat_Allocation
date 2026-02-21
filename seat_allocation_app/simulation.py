@@ -37,7 +37,7 @@ def build_seat_topology() -> list[Seat]:
     return seats
 
 
-def build_employee_directory(total_employees: int = 2500) -> list[Employee]:
+def build_employee_directory(total_employees: int = 1000) -> list[Employee]:
     departments = _departments()
     teams = _teams()
 

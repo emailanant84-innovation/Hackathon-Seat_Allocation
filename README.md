@@ -12,6 +12,7 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 - Total capacity: 2000 seats
 - Departments in simulation: 20
 - Teams in simulation: 100
+- Simulation employee pool: 1000 employees
 
 ## Seat allocation algorithm
 
@@ -24,7 +25,7 @@ The allocator uses a **beam-search strategy** with a learning cache:
 
 - `seat_allocation_app/process_orchestrator.py`: Main workflow orchestrator.
 - `seat_allocation_app/allocator.py`: Beam-search seat allocator with learning cache.
-- `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, scrollbars, live assignment tab, and electrical usage tab.
+- `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, floor sidebar, scrollbars, live assignment tab, live reasoning tab, and electrical usage tab.
 - `seat_allocation_app/device_usage.py`: Electrical device usage summary calculator.
 - `seat_allocation_app/logging_orchestrator.py`: Centralized activity logging orchestrator.
 - `seat_allocation_app/data_sources/access_stream.py`: Access-management live stream adapter.
@@ -45,20 +46,19 @@ python main.py
 The GUI opens in fit-to-page mode by default.
 
 Tabs:
-- **Buildings** (for each building, image shows 2 floors (`F1`, `F2`), 2 zones per floor, and **100 small seat squares per zone** highlighted dynamically based on occupancy, responsive to canvas size)
+- **Buildings** (for each building, image shows 2 floors at a time, 2 zones per floor, and **100 small seat squares per zone** highlighted dynamically based on occupancy)
 - **Floors**
 - **Zones**
 - **Seats**
 - **LIVE Seat Assignments** (employee details, seat, and assignment time)
+- **LIVE Reasoning** (allocator reasoning string for each live assignment)
 - **Electrical Usage** (lights, routers, monitors, desktop CPUs, AC vents usage summary)
 
-Each data-heavy tab includes vertical/horizontal scrollbars for browsing all rows.
+Buildings tab includes a sidebar floor selector to browse floors **1-2**, **2-3**, **3-4**, and **4-5**.
 
-Use buttons to:
-- **Run Simulation** (auto event injection every 3 seconds)
-- **Pause Simulation**
-- **Inject Event Now**
-- **Reset Simulation**
+Event simulation behavior:
+- Simulation interval is **2 seconds**.
+- After every **4 to 5 events**, generator intentionally repeats an employee with the same team or same department pattern.
 
 ## Run CLI demo
 

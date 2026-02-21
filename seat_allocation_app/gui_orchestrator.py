@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import tkinter as tk
 from collections import Counter
 from tkinter import ttk
@@ -23,6 +24,22 @@ class GUIOrchestrator:
         self._after_id: str | None = None
         self._last_seats_snapshot: list = []
 
+        self._employee_by_id = {
+            employee_id: self.process_orchestrator.employee_directory.get_employee(employee_id)
+            for employee_id in self.employee_ids
+        }
+        self._ids_by_team: dict[str, list[str]] = {}
+        self._ids_by_department: dict[str, list[str]] = {}
+        for employee_id, employee in self._employee_by_id.items():
+            if not employee:
+                continue
+            self._ids_by_team.setdefault(employee.team, []).append(employee_id)
+            self._ids_by_department.setdefault(employee.department, []).append(employee_id)
+
+        self._events_since_pattern = 0
+        self._pattern_interval = random.randint(4, 5)
+        self._pattern_anchor_id: str | None = None
+
         self.root = tk.Tk()
         self.root.title("Live Seat Allocation Control Tower")
         self.root.geometry("1280x900")
@@ -30,6 +47,7 @@ class GUIOrchestrator:
 
         self.latest_assignment_var = tk.StringVar(value="Waiting for first access event...")
         self.live_assignment_rows: list[tuple[str, ...]] = []
+        self.reasoning_rows: list[tuple[str, ...]] = []
 
         self._build_layout()
         self._refresh_views()
@@ -61,6 +79,7 @@ class GUIOrchestrator:
         self.zones_tab = ttk.Frame(notebook)
         self.seats_tab = ttk.Frame(notebook)
         self.live_tab = ttk.Frame(notebook)
+        self.reasoning_tab = ttk.Frame(notebook)
         self.device_tab = ttk.Frame(notebook)
 
         notebook.add(self.buildings_tab, text="Buildings")
@@ -68,10 +87,31 @@ class GUIOrchestrator:
         notebook.add(self.zones_tab, text="Zones")
         notebook.add(self.seats_tab, text="Seats")
         notebook.add(self.live_tab, text="LIVE Seat Assignments")
+        notebook.add(self.reasoning_tab, text="LIVE Reasoning")
         notebook.add(self.device_tab, text="Electrical Usage")
 
-        self.building_canvas = tk.Canvas(self.buildings_tab, bg="white")
-        self.building_canvas.pack(fill="both", expand=True)
+        building_panel = ttk.Frame(self.buildings_tab)
+        building_panel.pack(fill="both", expand=True)
+
+        self.floor_start_var = tk.IntVar(value=1)
+        sidebar = ttk.Frame(building_panel, width=110)
+        sidebar.pack(side="left", fill="y", padx=(0, 6), pady=4)
+        ttk.Label(sidebar, text="Floor Sidebar", font=("Arial", 10, "bold")).pack(anchor="w", pady=(4, 6))
+        ttk.Label(sidebar, text="Select start floor").pack(anchor="w")
+        self.floor_scroll = tk.Scale(
+            sidebar,
+            from_=1,
+            to=4,
+            orient="vertical",
+            variable=self.floor_start_var,
+            command=lambda _val: self._refresh_building_canvas(self._last_seats_snapshot),
+            length=260,
+        )
+        self.floor_scroll.pack(anchor="w", pady=6)
+        ttk.Label(sidebar, text="Shows 2 floors\nat a time").pack(anchor="w")
+
+        self.building_canvas = tk.Canvas(building_panel, bg="white")
+        self.building_canvas.pack(side="left", fill="both", expand=True)
         self.building_canvas.bind("<Configure>", self._on_canvas_resize)
 
         self.floor_tree = self._create_table_with_scrollbar(
@@ -101,6 +141,10 @@ class GUIOrchestrator:
                 "assigned_at",
             ),
         )
+        self.reasoning_tree = self._create_table_with_scrollbar(
+            self.reasoning_tab,
+            ("employee_id", "seat_id", "assigned_at", "reasoning"),
+        )
         self.device_tree = self._create_table_with_scrollbar(
             self.device_tab,
             (
@@ -122,7 +166,7 @@ class GUIOrchestrator:
         self.toggle_button.pack(side="left")
         ttk.Button(controls, text="Inject Event Now", command=self.inject_single_event).pack(side="left", padx=8)
         ttk.Button(controls, text="Reset Simulation", command=self.reset_simulation).pack(side="left", padx=8)
-        ttk.Label(controls, text="Automatic simulation interval: 3 seconds").pack(side="left", padx=15)
+        ttk.Label(controls, text="Automatic simulation interval: 2 seconds").pack(side="left", padx=15)
 
     def _create_table_with_scrollbar(self, parent: ttk.Frame, columns: tuple[str, ...]) -> ttk.Treeview:
         container = ttk.Frame(parent)
@@ -131,7 +175,7 @@ class GUIOrchestrator:
         tree = ttk.Treeview(container, columns=columns, show="headings")
         for col in columns:
             tree.heading(col, text=col.replace("_", " ").title())
-            tree.column(col, width=140, minwidth=110, anchor="center")
+            tree.column(col, width=160 if col == "reasoning" else 140, minwidth=110, anchor="center")
 
         y_scrollbar = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
         x_scrollbar = ttk.Scrollbar(container, orient="horizontal", command=tree.xview)
@@ -171,10 +215,14 @@ class GUIOrchestrator:
         self.process_orchestrator, self.employee_ids, self.card_by_employee = self._bootstrap_callback()
         self.employee_index = 0
         self.live_assignment_rows = []
+        self.reasoning_rows = []
+        self._events_since_pattern = 0
+        self._pattern_interval = random.randint(4, 5)
+        self._pattern_anchor_id = None
         self.latest_assignment_var.set("Simulation reset. Click Run Simulation to start demo.")
         self._refresh_views()
 
-    def _schedule_next_tick(self, delay_ms: int = 3000) -> None:
+    def _schedule_next_tick(self, delay_ms: int = 2000) -> None:
         if self.is_running:
             self._after_id = self.root.after(delay_ms, self._simulation_tick)
 
@@ -182,12 +230,32 @@ class GUIOrchestrator:
         if not self.is_running:
             return
         self.inject_single_event()
-        self._schedule_next_tick(3000)
+        self._schedule_next_tick(2000)
 
     def _next_employee_id(self) -> str:
-        employee_id = self.employee_ids[self.employee_index % len(self.employee_ids)]
+        if not self.employee_ids:
+            raise RuntimeError("No employees available for simulation")
+
+        if self._events_since_pattern >= self._pattern_interval and self._pattern_anchor_id:
+            anchor = self._employee_by_id.get(self._pattern_anchor_id)
+            if anchor and random.choice([True, False]):
+                pool = self._ids_by_team.get(anchor.team, [self._pattern_anchor_id])
+            elif anchor:
+                pool = self._ids_by_department.get(anchor.department, [self._pattern_anchor_id])
+            else:
+                pool = self.employee_ids
+
+            chosen = random.choice(pool)
+            self._events_since_pattern = 0
+            self._pattern_interval = random.randint(4, 5)
+            self._pattern_anchor_id = chosen
+            return chosen
+
+        chosen = self.employee_ids[self.employee_index % len(self.employee_ids)]
         self.employee_index += 1
-        return employee_id
+        self._events_since_pattern += 1
+        self._pattern_anchor_id = chosen
+        return chosen
 
     def inject_single_event(self) -> None:
         employee_id = self._next_employee_id()
@@ -198,6 +266,7 @@ class GUIOrchestrator:
 
         if assignment:
             employee = self.process_orchestrator.employee_directory.get_employee(assignment.employee_id)
+            assigned_at = assignment.assigned_at.strftime("%Y-%m-%d %H:%M:%S")
             self.live_assignment_rows.append(
                 (
                     assignment.employee_id,
@@ -209,7 +278,15 @@ class GUIOrchestrator:
                     assignment.building,
                     assignment.floor,
                     assignment.zone,
-                    assignment.assigned_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    assigned_at,
+                )
+            )
+            self.reasoning_rows.append(
+                (
+                    assignment.employee_id,
+                    assignment.seat_id,
+                    assigned_at,
+                    assignment.reasoning,
                 )
             )
             self.latest_assignment_var.set(
@@ -229,6 +306,7 @@ class GUIOrchestrator:
         self._refresh_zone_table(seats)
         self._refresh_seat_table(seats)
         self._refresh_live_assignment_table()
+        self._refresh_reasoning_table()
         self._refresh_device_usage_table(seats)
 
     def _refresh_building_canvas(self, seats: list) -> None:
@@ -236,9 +314,12 @@ class GUIOrchestrator:
         if not seats:
             return
 
+        start_floor = self.floor_start_var.get()
+        visible_floors = (f"F{start_floor}", f"F{min(5, start_floor + 1)}")
+
         width = max(self.building_canvas.winfo_width(), 700)
         height = max(self.building_canvas.winfo_height(), 460)
-        margin = max(10, width * 0.02)
+        margin = max(8, width * 0.02)
         gap = max(12, width * 0.02)
         building_width = (width - 2 * margin - gap) / 2
         building_height = height - 60
@@ -247,7 +328,7 @@ class GUIOrchestrator:
         seat_map = {
             (seat.building, seat.floor, seat.zone, int(seat.seat_id.split("-")[-1])): seat.status
             for seat in seats
-            if seat.floor in {"F1", "F2"}
+            if seat.floor in visible_floors
         }
         zone_colors = {"A": "#35a853", "B": "#2f6df6"}
 
@@ -260,7 +341,7 @@ class GUIOrchestrator:
             self.building_canvas.create_text((bx0 + bx1) / 2, by0 - 15, text=f"Building {building}", font=("Arial", 12, "bold"))
 
             floor_height = (building_height - 30) / 2
-            for f_idx, floor in enumerate(("F1", "F2")):
+            for f_idx, floor in enumerate(visible_floors):
                 fy0 = by0 + 15 + f_idx * floor_height
                 fy1 = fy0 + floor_height - 10
                 self.building_canvas.create_rectangle(bx0 + 10, fy0, bx1 - 10, fy1, outline="#999")
@@ -364,6 +445,13 @@ class GUIOrchestrator:
 
         for row in reversed(self.live_assignment_rows):
             self.live_tree.insert("", "end", values=row)
+
+    def _refresh_reasoning_table(self) -> None:
+        for item in self.reasoning_tree.get_children():
+            self.reasoning_tree.delete(item)
+
+        for row in reversed(self.reasoning_rows):
+            self.reasoning_tree.insert("", "end", values=row)
 
     def _refresh_device_usage_table(self, seats: list) -> None:
         for item in self.device_tree.get_children():
