@@ -14,7 +14,13 @@ from seat_allocation_app.models import AccessEvent, Employee, Seat
 from seat_allocation_app.notifications.email_client import EmailNotifier
 from seat_allocation_app.notifications.message_client import MessageNotifier
 from seat_allocation_app.process_orchestrator import ProcessOrchestrator
-from seat_allocation_app.simulation import all_departments, all_teams, build_employee_directory, build_seat_topology
+from seat_allocation_app.simulation import (
+    all_departments,
+    all_teams,
+    build_employee_directory,
+    build_seat_topology,
+    team_department_map,
+)
 
 
 def test_orchestrator_assigns_and_notifies() -> None:
@@ -51,7 +57,7 @@ def test_orchestrator_assigns_and_notifies() -> None:
     assert occupied["S1"] == "E1"
     assert occupied["S2"] == "E2"
     assert assignments[0].building == "B1"
-    assert "Utilization-first scoring" in assignments[0].reasoning
+    assert "Beam search scoring" in assignments[0].reasoning
     assert len(orchestrator.email_notifier.sent_messages) == 2
     assert len(orchestrator.message_notifier.sent_messages) == 2
 
@@ -86,9 +92,10 @@ def test_department_teams_cluster_in_zone() -> None:
     assert assignment.zone == "A"
 
 
-def test_simulation_topology_and_randomized_employee_scope() -> None:
+def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()
     employees = build_employee_directory(seed=42)
+    mapping = team_department_map()
 
     assert len(seats) == 720
     assert len({seat.department for seat in seats}) == 15
@@ -96,6 +103,12 @@ def test_simulation_topology_and_randomized_employee_scope() -> None:
 
     assert len(all_departments()) == 15
     assert len(all_teams()) == 40
+
+    # connection between team and department is consistent in both seats and employees
+    for seat in seats[:100]:
+        assert mapping[seat.team_cluster] == seat.department
+    for employee in employees[:100]:
+        assert mapping[employee.team] == employee.department
 
     assert len(employees) == 300
     assert len({employee.department for employee in employees}) == 12

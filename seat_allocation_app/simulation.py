@@ -14,24 +14,31 @@ def all_teams() -> list[str]:
     return [f"Team-{index:03d}" for index in range(1, 41)]
 
 
+def team_department_map() -> dict[str, str]:
+    departments = all_departments()
+    return {
+        team: departments[idx % len(departments)]
+        for idx, team in enumerate(all_teams())
+    }
+
+
 def build_seat_topology() -> list[Seat]:
     seats: list[Seat] = []
-    departments = all_departments()
     teams = all_teams()
+    team_dept = team_department_map()
 
     for building in range(1, 3):
         for floor in range(1, 3):
             for zone in ("A", "B", "C"):
                 for number in range(1, 61):
-                    department = departments[((building - 1) * 6 + (floor - 1) * 3 + (ord(zone) - 65) + number - 1) % len(departments)]
-                    team = teams[(number - 1) % len(teams)]
+                    team = teams[(number - 1 + (building - 1) * 5 + (floor - 1) * 3 + (ord(zone) - 65)) % len(teams)]
                     seats.append(
                         Seat(
                             seat_id=f"S-B{building}-F{floor}-{zone}-{number:03d}",
                             building=f"B{building}",
                             floor=f"F{floor}",
                             zone=zone,
-                            department=department,
+                            department=team_dept[team],
                             team_cluster=team,
                         )
                     )
@@ -45,12 +52,17 @@ def build_employee_directory(
     seed: int | None = None,
 ) -> list[Employee]:
     rng = random.Random(seed)
-    selected_departments = rng.sample(all_departments(), k=active_departments)
-    selected_teams = rng.sample(all_teams(), k=active_teams)
+    team_dept = team_department_map()
+
+    selected_departments = set(rng.sample(all_departments(), k=active_departments))
+    eligible_teams = [team for team, dept in team_dept.items() if dept in selected_departments]
+    selected_teams = rng.sample(eligible_teams, k=min(active_teams, len(eligible_teams)))
 
     employees: list[Employee] = []
     for i in range(1, total_employees + 1):
         employee_id = f"E{i:04d}"
+        team = selected_teams[(i - 1) % len(selected_teams)]
+        department = team_dept[team]
         employees.append(
             Employee(
                 employee_id=employee_id,
@@ -58,8 +70,8 @@ def build_employee_directory(
                 name=f"Employee {i}",
                 email=f"employee{i}@corp.com",
                 phone=f"+1202555{i:04d}",
-                department=selected_departments[(i - 1) % len(selected_departments)],
-                team=selected_teams[(i - 1) % len(selected_teams)],
+                department=department,
+                team=team,
             )
         )
     return employees

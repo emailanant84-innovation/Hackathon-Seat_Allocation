@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -9,7 +9,9 @@ from seat_allocation_app.models import Assignment, Employee, Seat
 
 @dataclass(slots=True)
 class SeatAllocator:
-    """Utilization-first allocator with team/department cohesion heuristics."""
+    """Beam-search allocator maximizing utilization with team/department cohesion."""
+
+    beam_width: int = 20
 
     def select_seat(
         self,
@@ -20,91 +22,90 @@ class SeatAllocator:
         if not candidate_seats:
             return None
 
-        occupied = [seat for seat in all_seats if seat.status == "occupied"]
-        occupancy_ratio = len(occupied) / len(all_seats) if all_seats else 0.0
+        occupied = [s for s in all_seats if s.status == "occupied"]
+        available = [s for s in all_seats if s.status == "available"]
 
-        team_zone_counts: Counter[tuple[str, str, str]] = Counter()
-        dept_zone_counts: Counter[tuple[str, str, str]] = Counter()
-        zone_load: Counter[tuple[str, str, str]] = Counter()
-        zone_dept_counts: dict[tuple[str, str, str], Counter[str]] = defaultdict(Counter)
+        team_zone_counts = Counter()
+        dept_zone_counts = Counter()
+        zone_load = Counter()
 
         for seat in occupied:
             zone_key = (seat.building, seat.floor, seat.zone)
             zone_load[zone_key] += 1
-            zone_dept_counts[zone_key][seat.department] += 1
-            if seat.team_cluster == employee.team and seat.department == employee.department:
-                team_zone_counts[zone_key] += 1
             if seat.department == employee.department:
                 dept_zone_counts[zone_key] += 1
+                if seat.team_cluster == employee.team:
+                    team_zone_counts[zone_key] += 1
 
         team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
         dept_anchor = dept_zone_counts.most_common(1)[0][0] if dept_zone_counts else None
 
-        best_seat = None
-        best_score = None
-
-        consolidation_weight = 8 if occupancy_ratio < 0.8 else 4
-
-        for seat in candidate_seats:
+        def base_score(seat: Seat) -> float:
             zone_key = (seat.building, seat.floor, seat.zone)
-            same_team_zone = team_zone_counts.get(zone_key, 0)
-            same_dept_zone = dept_zone_counts.get(zone_key, 0)
-            zone_occupancy = zone_load.get(zone_key, 0)
-            same_seat_department = int(seat.department == employee.department)
+            score = 0.0
 
-            score = 0
-
-            # 1) same team together (highest priority)
-            score += same_team_zone * 1000
+            # 1) same team together (strongest)
             if team_anchor and zone_key == team_anchor:
-                score += 5000
+                score += 10_000
+            score += team_zone_counts.get(zone_key, 0) * 1_200
+            score += 500 if seat.team_cluster == employee.team else 0
 
-            # 2) teams in same department together in same zone
-            score += same_dept_zone * 300
+            # 2) teams from same department together in zone
             if dept_anchor and zone_key == dept_anchor:
-                score += 1500
+                score += 2_500
+            score += dept_zone_counts.get(zone_key, 0) * 350
+            score += 80 if seat.department == employee.department else 0
 
-            # Prefer zones that already host the department (while allowing mixed departments)
-            if zone_dept_counts[zone_key].get(employee.department, 0) > 0:
-                score += 400
+            # 3) maximize utilization by consolidating occupied zones
+            score += zone_load.get(zone_key, 0) * 14
 
-            # 3) maximize utilization (consolidate occupancy)
-            score += zone_occupancy * consolidation_weight
-
-            # Prefer designated seat department if tie-ish
-            score += same_seat_department * 40
-
-            # only go to different floor/building when needed (soft penalty)
+            # go to different floor/building only when required
             if team_anchor and zone_key[:2] != team_anchor[:2]:
-                score -= 120
+                score -= 180
             if dept_anchor and zone_key[:2] != dept_anchor[:2]:
-                score -= 50
+                score -= 75
 
-            # tiny deterministic tiebreak for stability
+            # deterministic tie break
             suffix = seat.seat_id.split("-")[-1]
-            numeric_suffix = int(suffix) if suffix.isdigit() else 0
-            score += numeric_suffix * -0.001
+            score -= (int(suffix) if suffix.isdigit() else 0) * 0.001
+            return score
 
-            if best_score is None or score > best_score:
-                best_score = score
-                best_seat = seat
+        def lookahead_score(seat: Seat) -> float:
+            """One-step beam lookahead: keeps room for same-team / same-dept clustering."""
+            zone_key = (seat.building, seat.floor, seat.zone)
+            remaining_same_team = sum(
+                1 for s in available if s.seat_id != seat.seat_id and s.team_cluster == employee.team and s.department == employee.department and (s.building, s.floor, s.zone) == zone_key
+            )
+            remaining_same_dept = sum(
+                1 for s in available if s.seat_id != seat.seat_id and s.department == employee.department and (s.building, s.floor, s.zone) == zone_key
+            )
+            return remaining_same_team * 120 + remaining_same_dept * 18
 
-        if not best_seat:
+        frontier = sorted(candidate_seats, key=base_score, reverse=True)
+        beam = frontier[: self.beam_width]
+
+        if not beam:
             return None
 
+        ranked_with_lookahead = sorted(
+            beam,
+            key=lambda seat: (base_score(seat) + lookahead_score(seat)),
+            reverse=True,
+        )
+
+        selected = ranked_with_lookahead[0]
         reasoning = (
-            "Utilization-first scoring: team_together > department_zone_together > "
-            "zone_consolidation; selected="
-            f"{best_seat.seat_id}; occupancy_ratio={occupancy_ratio:.2f}; "
-            f"team_anchor={team_anchor}; dept_anchor={dept_anchor}"
+            "Beam search scoring: team_together > dept_zone_together > utilization; "
+            f"selected={selected.seat_id}; team_anchor={team_anchor}; dept_anchor={dept_anchor}; "
+            "cross-department allowed when team/department cohesion remains strongest"
         )
 
         return Assignment(
             employee_id=employee.employee_id,
-            seat_id=best_seat.seat_id,
-            building=best_seat.building,
-            floor=best_seat.floor,
-            zone=best_seat.zone,
+            seat_id=selected.seat_id,
+            building=selected.building,
+            floor=selected.floor,
+            zone=selected.zone,
             reasoning=reasoning,
             assigned_at=datetime.utcnow(),
         )

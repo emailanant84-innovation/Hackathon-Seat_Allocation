@@ -17,18 +17,24 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 
 ## Seat allocation algorithm
 
-The allocator uses a **utilization-first heuristic scoring strategy**:
-- Priority order for seat selection: **same team**, then **same department**, then **same zone density**.
-- Same-team together: allocator strongly anchors an employee to zones where the same team already sits.
-- Department cohesion: teams from the same department are preferentially placed in the same zone.
-- Controlled mixing: different departments can share a zone if team and department cohesion priorities stay intact.
-- Building/floor preference: allocator uses different floor/building only when local options are less suitable.
-- Utilization-first: when possible, allocator consolidates occupancy into already active zones to maximize seat utilization and improve energy efficiency.
+The allocator uses a **beam-search strategy** to maximize utilization while preserving locality:
+- Priority order for seat selection: **same team**, then **same department zone cohesion**, then **zone utilization/consolidation**.
+- Same-team together: beam score strongly anchors employees to zones where their team already sits.
+- Department cohesion: teams from the same department are preferentially clustered in the same zone.
+- Controlled mixing: different departments can share a zone when team and department priorities are preserved.
+- Building/floor preference: allocator applies penalties for changing floor/building and only moves when required by score outcomes.
+
+## Team ↔ Department connection in simulation
+
+Simulation maintains a deterministic mapping between teams and departments (`team_department_map()`):
+- Every team belongs to exactly one department.
+- Seat topology and employee generation use the same mapping.
+- The allocator then uses this consistent relationship (employee team+department and seat team+department) while making beam-search decisions.
 
 ## Modules
 
 - `seat_allocation_app/process_orchestrator.py`: Main workflow orchestrator.
-- `seat_allocation_app/allocator.py`: Utilization-first seat allocator with team/department cohesion heuristics.
+- `seat_allocation_app/allocator.py`: Beam-search seat allocator maximizing utilization with locality constraints.
 - `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, scrollbars, live assignment tab, live reasoning tab, and electrical usage tab.
 - `seat_allocation_app/device_usage.py`: Electrical device usage summary calculator.
 - `seat_allocation_app/logging_orchestrator.py`: Centralized activity logging orchestrator.
