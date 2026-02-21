@@ -1,0 +1,1 @@
+"""Seat allocation application package."""

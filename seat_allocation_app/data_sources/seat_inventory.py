@@ -1,0 +1,32 @@
+from __future__ import annotations
+
+from collections import Counter
+
+from seat_allocation_app.models import Seat
+
+
+class SeatInventoryClient:
+    def __init__(self, seats: list[Seat]) -> None:
+        self._seats = {seat.seat_id: seat for seat in seats}
+
+    def seats_for_department(self, department: str) -> list[Seat]:
+        return [
+            seat
+            for seat in self._seats.values()
+            if seat.department == department and seat.status == "available"
+        ]
+
+    def occupied_zone_counts(self) -> Counter[tuple[str, str]]:
+        counts: Counter[tuple[str, str]] = Counter()
+        for seat in self._seats.values():
+            if seat.status == "occupied":
+                counts[(seat.floor, seat.zone)] += 1
+        return counts
+
+    def mark_occupied(self, seat_id: str, employee_id: str) -> None:
+        seat = self._seats[seat_id]
+        seat.status = "occupied"
+        seat.occupied_by = employee_id
+
+    def all_seats(self) -> list[Seat]:
+        return list(self._seats.values())
