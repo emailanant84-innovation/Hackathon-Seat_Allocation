@@ -10,22 +10,31 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 - Zones per floor: 2 (`A`, `B`)
 - Seats per zone: 100
 - Total capacity: 2000 seats
+- Departments in simulation: 20
+- Teams in simulation: 100
+
+## Seat allocation algorithm
+
+The allocator uses a **beam-search strategy** with a learning cache:
+- Priority order for seat selection: **same team**, then **same department**, then **same zone density**.
+- Learning: successful placements are cached by `(department, team)` and reused for faster future decisions.
+- Strict locality rule: once a team+department has an occupied location, future members of that same team+department are constrained to the same `(building, floor, zone)`.
 
 ## Modules
 
 - `seat_allocation_app/process_orchestrator.py`: Main workflow orchestrator.
+- `seat_allocation_app/allocator.py`: Beam-search seat allocator with learning cache.
 - `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, scrollbars, live assignment tab, and electrical usage tab.
 - `seat_allocation_app/device_usage.py`: Electrical device usage summary calculator.
 - `seat_allocation_app/logging_orchestrator.py`: Centralized activity logging orchestrator.
 - `seat_allocation_app/data_sources/access_stream.py`: Access-management live stream adapter.
 - `seat_allocation_app/data_sources/employee_directory.py`: Employee profile lookup adapter.
 - `seat_allocation_app/data_sources/seat_inventory.py`: Seat inventory and occupancy adapter.
-- `seat_allocation_app/allocator.py`: Team-aware seat assignment engine.
 - `seat_allocation_app/energy_optimizer.py`: Energy optimization logic for floor zones.
 - `seat_allocation_app/iot_client.py`: IoT command dispatch adapter.
 - `seat_allocation_app/notifications/email_client.py`: Email dispatch adapter.
 - `seat_allocation_app/notifications/message_client.py`: SMS/message dispatch adapter.
-- `seat_allocation_app/simulation.py`: Runtime data generation for 2000-seat topology and employees (including `card_id`).
+- `seat_allocation_app/simulation.py`: Runtime data generation for 2000-seat topology and employees.
 
 ## Run GUI simulation
 
@@ -36,7 +45,7 @@ python main.py
 The GUI opens in fit-to-page mode by default.
 
 Tabs:
-- **Buildings** (for each building, the image shows 2 floors (`F1`, `F2`), 2 zones per floor, and **100 small seat squares per zone** highlighted dynamically based on occupancy)
+- **Buildings** (for each building, image shows 2 floors (`F1`, `F2`), 2 zones per floor, and **100 small seat squares per zone** highlighted dynamically based on occupancy, responsive to canvas size)
 - **Floors**
 - **Zones**
 - **Seats**

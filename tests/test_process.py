@@ -56,10 +56,31 @@ def test_orchestrator_assigns_team_cluster_and_notifies() -> None:
     assert any(cmd.command == "POWER_ON" for cmd in orchestrator.iot_client.command_history)
 
 
-def test_simulation_topology_has_2000_seats() -> None:
+def test_team_department_not_split_across_zones() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E1", "CARD-E1", "Alex", "a@x", "+1", "Engineering", "Platform")
+
+    all_seats = [
+        Seat("S1", "B1", "F1", "A", "Engineering", "Platform", status="occupied", occupied_by="E9"),
+        Seat("S2", "B1", "F1", "A", "Engineering", "Platform"),
+        Seat("S3", "B1", "F1", "B", "Engineering", "Platform"),
+    ]
+    candidates = [all_seats[1], all_seats[2]]
+
+    assignment = allocator.select_seat(employee, candidates, all_seats)
+    assert assignment is not None
+    assert (assignment.building, assignment.floor, assignment.zone) == ("B1", "F1", "A")
+
+
+def test_simulation_topology_has_2000_seats_and_scale_dimensions() -> None:
     seats = build_seat_topology()
+    employees = build_employee_directory(total_employees=2500)
+
     assert len(seats) == 2000
-    assert len({(s.building, s.floor, s.zone) for s in seats}) == 20
+    assert len({seat.department for seat in seats}) == 20
+    assert len({seat.team_cluster for seat in seats}) == 100
+    assert len({employee.department for employee in employees}) == 20
+    assert len({employee.team for employee in employees}) == 100
 
 
 def test_employee_directory_contains_card_id() -> None:

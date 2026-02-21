@@ -236,13 +236,13 @@ class GUIOrchestrator:
         if not seats:
             return
 
-        width = max(self.building_canvas.winfo_width(), 980)
-        height = max(self.building_canvas.winfo_height(), 680)
-        margin = 20
-        gap = 30
+        width = max(self.building_canvas.winfo_width(), 700)
+        height = max(self.building_canvas.winfo_height(), 460)
+        margin = max(10, width * 0.02)
+        gap = max(12, width * 0.02)
         building_width = (width - 2 * margin - gap) / 2
-        building_height = height - 80
-        y0 = 40
+        building_height = height - 60
+        y0 = 30
 
         seat_map = {
             (seat.building, seat.floor, seat.zone, int(seat.seat_id.split("-")[-1])): seat.status

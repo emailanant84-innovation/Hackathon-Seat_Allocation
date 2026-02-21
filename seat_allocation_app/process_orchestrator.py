@@ -38,7 +38,11 @@ class ProcessOrchestrator:
             return None
 
         candidates = self.seat_inventory.seats_for_department(employee.department)
-        assignment = self.seat_allocator.select_seat(employee, candidates)
+        assignment = self.seat_allocator.select_seat(
+            employee,
+            candidates,
+            self.seat_inventory.all_seats(),
+        )
         if not assignment:
             self.logger.warning(
                 f"No seat available for employee_id={employee.employee_id} department={employee.department}."

@@ -5,17 +5,25 @@ from datetime import datetime
 from seat_allocation_app.models import AccessEvent, Employee, Seat
 
 
+def _departments() -> list[str]:
+    return [f"Department-{index:02d}" for index in range(1, 21)]
+
+
+def _teams() -> list[str]:
+    return [f"Team-{index:03d}" for index in range(1, 101)]
+
+
 def build_seat_topology() -> list[Seat]:
     seats: list[Seat] = []
-    departments = ["Engineering", "HR", "Finance", "Sales"]
-    teams = ["Platform", "Data", "PeopleOps", "RevOps"]
+    departments = _departments()
+    teams = _teams()
 
     for building in range(1, 3):
         for floor in range(1, 6):
             for zone in ("A", "B"):
                 for number in range(1, 101):
-                    department = departments[(floor + building) % len(departments)]
-                    team = teams[(number + floor) % len(teams)]
+                    department = departments[((building - 1) * 10 + (floor - 1) * 2 + (0 if zone == "A" else 1)) % len(departments)]
+                    team = teams[(number - 1) % len(teams)]
                     seats.append(
                         Seat(
                             seat_id=f"S-B{building}-F{floor}-{zone}-{number:03d}",
@@ -30,8 +38,8 @@ def build_seat_topology() -> list[Seat]:
 
 
 def build_employee_directory(total_employees: int = 2500) -> list[Employee]:
-    departments = ["Engineering", "HR", "Finance", "Sales"]
-    teams = ["Platform", "Data", "PeopleOps", "RevOps"]
+    departments = _departments()
+    teams = _teams()
 
     employees: list[Employee] = []
     for i in range(1, total_employees + 1):
@@ -43,8 +51,8 @@ def build_employee_directory(total_employees: int = 2500) -> list[Employee]:
                 name=f"Employee {i}",
                 email=f"employee{i}@corp.com",
                 phone=f"+1202555{i:04d}",
-                department=departments[i % len(departments)],
-                team=teams[i % len(teams)],
+                department=departments[(i - 1) % len(departments)],
+                team=teams[(i - 1) % len(teams)],
             )
         )
     return employees
