@@ -22,6 +22,7 @@ class SeatAllocator:
         return Assignment(
             employee_id=employee.employee_id,
             seat_id=selected.seat_id,
+            building=selected.building,
             floor=selected.floor,
             zone=selected.zone,
             assigned_at=datetime.utcnow(),

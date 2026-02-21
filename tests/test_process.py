@@ -13,6 +13,7 @@ from seat_allocation_app.models import AccessEvent, Employee, Seat
 from seat_allocation_app.notifications.email_client import EmailNotifier
 from seat_allocation_app.notifications.message_client import MessageNotifier
 from seat_allocation_app.process_orchestrator import ProcessOrchestrator
+from seat_allocation_app.simulation import build_seat_topology
 
 
 def test_orchestrator_assigns_team_cluster_and_notifies() -> None:
@@ -31,8 +32,8 @@ def test_orchestrator_assigns_team_cluster_and_notifies() -> None:
         ),
         seat_inventory=SeatInventoryClient(
             [
-                Seat("S1", "F1", "A", "Engineering", "Platform"),
-                Seat("S2", "F1", "A", "Engineering", "Data"),
+                Seat("S1", "B1", "F1", "A", "Engineering", "Platform"),
+                Seat("S2", "B1", "F1", "A", "Engineering", "Data"),
             ]
         ),
         seat_allocator=SeatAllocator(),
@@ -43,11 +44,18 @@ def test_orchestrator_assigns_team_cluster_and_notifies() -> None:
         logger=LoggingOrchestrator("test_logger"),
     )
 
-    orchestrator.run_once()
+    assignments = orchestrator.run_once()
 
     occupied = {seat.seat_id: seat.occupied_by for seat in orchestrator.seat_inventory.all_seats()}
     assert occupied["S1"] == "E1"
     assert occupied["S2"] == "E2"
+    assert assignments[0].building == "B1"
     assert len(orchestrator.email_notifier.sent_messages) == 2
     assert len(orchestrator.message_notifier.sent_messages) == 2
     assert any(cmd.command == "POWER_ON" for cmd in orchestrator.iot_client.command_history)
+
+
+def test_simulation_topology_has_2000_seats() -> None:
+    seats = build_seat_topology()
+    assert len(seats) == 2000
+    assert len({(s.building, s.floor, s.zone) for s in seats}) == 20

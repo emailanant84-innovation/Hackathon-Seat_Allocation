@@ -3,9 +3,18 @@
 This Python application allocates an employee seat in near real-time when a building access event is captured.
 It keeps employees with their teams by prioritizing team-clustered seats, then optimizes floor energy usage by powering on occupied zones and powering off idle zones.
 
+## Topology covered
+
+- Buildings: 2 (`B1`, `B2`)
+- Floors per building: 5 (`F1`-`F5`)
+- Zones per floor: 2 (`A`, `B`)
+- Seats per zone: 100
+- Total capacity: 2000 seats
+
 ## Modules
 
 - `seat_allocation_app/process_orchestrator.py`: Main workflow orchestrator.
+- `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with live simulation every 3 seconds.
 - `seat_allocation_app/logging_orchestrator.py`: Centralized activity logging orchestrator.
 - `seat_allocation_app/data_sources/access_stream.py`: Access-management live stream adapter.
 - `seat_allocation_app/data_sources/employee_directory.py`: Employee profile lookup adapter.
@@ -15,11 +24,21 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 - `seat_allocation_app/iot_client.py`: IoT command dispatch adapter.
 - `seat_allocation_app/notifications/email_client.py`: Email dispatch adapter.
 - `seat_allocation_app/notifications/message_client.py`: SMS/message dispatch adapter.
+- `seat_allocation_app/simulation.py`: Runtime data generation for 2000-seat topology and employees.
 
-## Run demo
+## Run GUI simulation
 
 ```bash
 python main.py
+```
+
+The GUI contains separate tabs for Buildings, Floors, Zones, and Seats with real-time status updates.
+An access event is injected every 3 seconds and the latest seat assignment is shown live.
+
+## Run CLI demo
+
+```bash
+python main.py --cli
 ```
 
 ## Run tests

@@ -28,6 +28,7 @@ class AccessEvent:
 @dataclass(slots=True)
 class Seat:
     seat_id: str
+    building: str
     floor: str
     zone: str
     department: str
@@ -40,6 +41,7 @@ class Seat:
 class Assignment:
     employee_id: str
     seat_id: str
+    building: str
     floor: str
     zone: str
     assigned_at: datetime = field(default_factory=datetime.utcnow)
@@ -47,6 +49,7 @@ class Assignment:
 
 @dataclass(slots=True)
 class DeviceCommand:
+    building: str
     floor: str
     zone: str
     command: Literal["POWER_ON", "POWER_OFF"]

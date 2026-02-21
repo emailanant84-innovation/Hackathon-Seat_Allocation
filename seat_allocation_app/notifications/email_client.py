@@ -10,6 +10,6 @@ class EmailNotifier:
     def send_seat_assignment(self, employee: Employee, assignment: Assignment) -> None:
         message = (
             f"Email to {employee.email}: Hi {employee.name}, your seat is "
-            f"{assignment.seat_id} ({assignment.floor}/{assignment.zone})."
+            f"{assignment.seat_id} ({assignment.building}/{assignment.floor}/{assignment.zone})."
         )
         self.sent_messages.append(message)

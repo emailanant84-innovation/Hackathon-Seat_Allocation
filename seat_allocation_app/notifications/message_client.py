@@ -10,6 +10,6 @@ class MessageNotifier:
     def send_seat_assignment(self, employee: Employee, assignment: Assignment) -> None:
         message = (
             f"SMS to {employee.phone}: Seat {assignment.seat_id} allocated in "
-            f"{assignment.floor}/{assignment.zone}."
+            f"{assignment.building}/{assignment.floor}/{assignment.zone}."
         )
         self.sent_messages.append(message)

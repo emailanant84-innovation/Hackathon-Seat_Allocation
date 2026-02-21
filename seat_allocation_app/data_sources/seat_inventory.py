@@ -16,11 +16,11 @@ class SeatInventoryClient:
             if seat.department == department and seat.status == "available"
         ]
 
-    def occupied_zone_counts(self) -> Counter[tuple[str, str]]:
-        counts: Counter[tuple[str, str]] = Counter()
+    def occupied_zone_counts(self) -> Counter[tuple[str, str, str]]:
+        counts: Counter[tuple[str, str, str]] = Counter()
         for seat in self._seats.values():
             if seat.status == "occupied":
-                counts[(seat.floor, seat.zone)] += 1
+                counts[(seat.building, seat.floor, seat.zone)] += 1
         return counts
 
     def mark_occupied(self, seat_id: str, employee_id: str) -> None:
