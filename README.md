@@ -25,6 +25,8 @@ The allocator uses a **beam-search strategy** to maximize utilization while pres
 - Controlled mixing: different departments can share a zone when team and department priorities are preserved.
 - Zone department cap: each zone can host employees from at most **2 departments** at a time, computed from actual live occupants in the zone.
 - Building/floor preference: allocator first reduces candidates to the same floor (if possible), then same building, before considering other locations.
+- Event batching: access events are processed in micro-batches of 2 and ordered by department/team inside each batch to improve locality consistency.
+- Team seat ordering: within a chosen zone, scoring prefers seat numbers close to existing same-team occupied seats to avoid distant placement drift.
 
 ## Team ↔ Department connection in simulation
 

@@ -255,6 +255,63 @@ def test_relaxed_dept_lock_prioritizes_other_existing_dept_zone() -> None:
     assert assignment.building == "B1"
     assert assignment.floor == "F1"
 
+
+
+def test_run_once_orders_each_batch_of_two_by_department_team() -> None:
+    first = datetime.utcnow()
+    second = datetime.utcnow()
+
+    orchestrator = ProcessOrchestrator(
+        access_stream=AccessControlStream([AccessEvent("E2", "C2", first), AccessEvent("E1", "C1", second)]),
+        employee_directory=EmployeeDirectoryClient(
+            [
+                Employee("E1", "CARD-E1", "Alex", "alex@example.com", "+111", "Dept-A", "Team-A"),
+                Employee("E2", "CARD-E2", "Blair", "blair@example.com", "+222", "Dept-B", "Team-B"),
+            ]
+        ),
+        seat_inventory=SeatInventoryClient(
+            [
+                Seat("S1", "B1", "F1", "A", "Dept-A", "Team-A"),
+                Seat("S2", "B1", "F1", "A", "Dept-B", "Team-B"),
+            ]
+        ),
+        seat_allocator=SeatAllocator(),
+        energy_optimizer=EnergyOptimizer(),
+        iot_client=IoTDeviceClient(),
+        email_notifier=EmailNotifier(),
+        message_notifier=MessageNotifier(),
+        logger=LoggingOrchestrator("batch_order_test"),
+    )
+
+    ordered = orchestrator._order_batch([AccessEvent("E2", "C2", first), AccessEvent("E1", "C1", second)])
+    assert [event.employee_id for event in ordered] == ["E1", "E2"]
+
+
+def test_same_team_prefers_nearby_seat_numbers_within_zone() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E16", "CARD-E16", "Tao", "t@x", "+16", "Dept-A", "Team-X")
+
+    all_seats = [
+        Seat(
+            "S-B1-F1-A-049",
+            "B1",
+            "F1",
+            "A",
+            "Dept-A",
+            "Team-X",
+            status="occupied",
+            occupied_by="E1",
+            occupied_department="Dept-A",
+            occupied_team="Team-X",
+        ),
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-X"),
+        Seat("S-B1-F1-A-050", "B1", "F1", "A", "Dept-A", "Team-X"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2]], all_seats)
+    assert assignment is not None
+    assert assignment.seat_id == "S-B1-F1-A-050"
+
 def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()
     employees = build_employee_directory(seed=42)

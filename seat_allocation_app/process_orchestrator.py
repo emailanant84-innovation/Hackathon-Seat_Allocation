@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import islice
 
 from seat_allocation_app.allocator import SeatAllocator
 from seat_allocation_app.data_sources.access_stream import AccessControlStream
@@ -25,6 +26,21 @@ class ProcessOrchestrator:
     email_notifier: EmailNotifier
     message_notifier: MessageNotifier
     logger: LoggingOrchestrator
+
+
+    def _order_batch(self, batch: list[AccessEvent]) -> list[AccessEvent]:
+        def key(event: AccessEvent) -> tuple[str, str, str, str]:
+            employee = self.employee_directory.get_employee(event.employee_id)
+            if not employee:
+                return ("~", "~", event.entered_at.isoformat(), event.employee_id)
+            return (
+                employee.department,
+                employee.team,
+                event.entered_at.isoformat(),
+                event.employee_id,
+            )
+
+        return sorted(batch, key=key)
 
     def process_event(self, access_event: AccessEvent) -> Assignment | None:
         self.logger.info(
@@ -74,8 +90,17 @@ class ProcessOrchestrator:
 
     def run_once(self) -> list[Assignment]:
         assignments: list[Assignment] = []
-        for access_event in self.access_stream.consume():
-            assignment = self.process_event(access_event)
-            if assignment:
-                assignments.append(assignment)
+        stream = self.access_stream.consume()
+
+        while True:
+            batch = list(islice(stream, 2))
+            if not batch:
+                break
+
+            ordered_batch = self._order_batch(batch)
+            for access_event in ordered_batch:
+                assignment = self.process_event(access_event)
+                if assignment:
+                    assignments.append(assignment)
+
         return assignments

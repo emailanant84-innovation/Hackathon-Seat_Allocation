@@ -101,6 +101,19 @@ class SeatAllocator:
                 if seat.team_cluster == employee.team:
                     available_same_team_by_zone[zone_key] += 1
 
+        team_suffix_totals_by_zone: Counter[tuple[str, str, str]] = Counter()
+        team_suffix_counts_by_zone: Counter[tuple[str, str, str]] = Counter()
+        for seat in occupied:
+            zone_key = (seat.building, seat.floor, seat.zone)
+            occupied_department = seat.occupied_department or seat.department
+            occupied_team = seat.occupied_team or seat.team_cluster
+            if occupied_department != employee.department or occupied_team != employee.team:
+                continue
+            suffix = seat.seat_id.split("-")[-1]
+            if suffix.isdigit():
+                team_suffix_totals_by_zone[zone_key] += int(suffix)
+                team_suffix_counts_by_zone[zone_key] += 1
+
         # Domain reduction pass 2: strict floor-first, then building-first.
         floor_preferred = False
         building_preferred = False
@@ -147,7 +160,13 @@ class SeatAllocator:
                 score -= 75
 
             suffix = seat.seat_id.split("-")[-1]
-            score -= (int(suffix) if suffix.isdigit() else 0) * 0.001
+            if suffix.isdigit():
+                seat_num = int(suffix)
+                team_count = team_suffix_counts_by_zone.get(zone_key, 0)
+                if team_count:
+                    team_center = team_suffix_totals_by_zone[zone_key] / team_count
+                    score -= abs(seat_num - team_center) * 0.25
+                score -= seat_num * 0.001
             return score
 
         def lookahead_score(seat: Seat) -> float:
