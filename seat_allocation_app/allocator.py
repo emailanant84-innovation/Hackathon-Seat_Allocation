@@ -91,6 +91,16 @@ class SeatAllocator:
         if not candidate_seats:
             return None
 
+        # Precompute employee-specific availability maps for fast lookahead scoring.
+        available_same_team_by_zone: Counter[tuple[str, str, str]] = Counter()
+        available_same_dept_by_zone: Counter[tuple[str, str, str]] = Counter()
+        for seat in available:
+            zone_key = (seat.building, seat.floor, seat.zone)
+            if seat.department == employee.department:
+                available_same_dept_by_zone[zone_key] += 1
+                if seat.team_cluster == employee.team:
+                    available_same_team_by_zone[zone_key] += 1
+
         # Domain reduction pass 2: strict floor-first, then building-first.
         floor_preferred = False
         building_preferred = False
@@ -142,32 +152,21 @@ class SeatAllocator:
 
         def lookahead_score(seat: Seat) -> float:
             zone_key = (seat.building, seat.floor, seat.zone)
-            remaining_same_team = sum(
-                1
-                for s in available
-                if s.seat_id != seat.seat_id
-                and s.team_cluster == employee.team
-                and s.department == employee.department
-                and (s.building, s.floor, s.zone) == zone_key
-            )
-            remaining_same_dept = sum(
-                1
-                for s in available
-                if s.seat_id != seat.seat_id
-                and s.department == employee.department
-                and (s.building, s.floor, s.zone) == zone_key
-            )
+            remaining_same_team = max(0, available_same_team_by_zone.get(zone_key, 0) - 1)
+            remaining_same_dept = max(0, available_same_dept_by_zone.get(zone_key, 0) - 1)
             return remaining_same_team * 120 + remaining_same_dept * 18
 
-        frontier = sorted(candidate_seats, key=base_score, reverse=True)
+        base_scores = {seat.seat_id: base_score(seat) for seat in candidate_seats}
+        frontier = sorted(candidate_seats, key=lambda seat: base_scores[seat.seat_id], reverse=True)
         beam = frontier[: self.beam_width]
 
         if not beam:
             return None
 
+        lookahead_scores = {seat.seat_id: lookahead_score(seat) for seat in beam}
         ranked_with_lookahead = sorted(
             beam,
-            key=lambda seat: (base_score(seat) + lookahead_score(seat)),
+            key=lambda seat: (base_scores[seat.seat_id] + lookahead_scores[seat.seat_id]),
             reverse=True,
         )
 
