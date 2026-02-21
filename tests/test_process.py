@@ -140,6 +140,41 @@ def test_zone_allows_second_department() -> None:
     assert assignment is not None
     assert assignment.zone == "A"
 
+
+
+def test_domain_reduction_relaxes_dept_lock_when_zone_cap_blocks_anchor() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E11", "CARD-E11", "Mia", "m@x", "+11", "Dept-A", "Team-A2")
+
+    all_seats = [
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E1"),
+        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-B", "Team-B1", status="occupied", occupied_by="E2"),
+        Seat("S-B1-F1-A-003", "B1", "F1", "A", "Dept-C", "Team-C1", status="occupied", occupied_by="E3"),
+        Seat("S-B1-F1-A-004", "B1", "F1", "A", "Dept-A", "Team-A2"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-A", "Team-A2"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[3], all_seats[4]], all_seats)
+    assert assignment is not None
+    assert assignment.zone == "B"
+
+
+def test_prefers_same_floor_before_other_floor_or_building() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E12", "CARD-E12", "Noa", "n@x", "+12", "Dept-A", "Team-A1")
+
+    all_seats = [
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E1"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-A", "Team-A1"),
+        Seat("S-B1-F2-A-001", "B1", "F2", "A", "Dept-A", "Team-A1"),
+        Seat("S-B2-F1-A-001", "B2", "F1", "A", "Dept-A", "Team-A1"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2], all_seats[3]], all_seats)
+    assert assignment is not None
+    assert assignment.building == "B1"
+    assert assignment.floor == "F1"
+
 def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()
     employees = build_employee_directory(seed=42)

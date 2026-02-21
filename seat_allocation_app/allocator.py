@@ -42,6 +42,8 @@ class SeatAllocator:
         team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
         dept_anchor = dept_zone_counts.most_common(1)[0][0] if dept_zone_counts else None
 
+        original_candidates = list(candidate_seats)
+
         # Hard rule: keep same-department employees in the same zone when that zone still has capacity.
         dept_locked = False
         if dept_anchor:
@@ -52,15 +54,42 @@ class SeatAllocator:
                 candidate_seats = dept_zone_candidates
                 dept_locked = True
 
-        # Hard rule: at most two unique departments can occupy any single zone.
-        candidate_seats = [
-            seat
-            for seat in candidate_seats
-            if len(zone_departments.get((seat.building, seat.floor, seat.zone), set()) | {employee.department}) <= 2
-        ]
+        # Domain reduction pass 1: exclude seats that would create a 3rd department in the zone.
+        # If the department lock causes an empty domain, relax the lock and reduce the broader domain.
+        def enforce_zone_department_cap(seats: list[Seat]) -> list[Seat]:
+            return [
+                seat
+                for seat in seats
+                if len(zone_departments.get((seat.building, seat.floor, seat.zone), set()) | {employee.department}) <= 2
+            ]
+
+        candidate_seats = enforce_zone_department_cap(candidate_seats)
+        lock_relaxed = False
+        if not candidate_seats and dept_locked:
+            candidate_seats = enforce_zone_department_cap(original_candidates)
+            lock_relaxed = True
 
         if not candidate_seats:
             return None
+
+        # Domain reduction pass 2: prefer same floor first, then same building.
+        anchor_zone = team_anchor or dept_anchor
+        floor_preferred = False
+        building_preferred = False
+        if anchor_zone:
+            same_floor = [
+                seat
+                for seat in candidate_seats
+                if (seat.building, seat.floor) == (anchor_zone[0], anchor_zone[1])
+            ]
+            if same_floor:
+                candidate_seats = same_floor
+                floor_preferred = True
+            else:
+                same_building = [seat for seat in candidate_seats if seat.building == anchor_zone[0]]
+                if same_building:
+                    candidate_seats = same_building
+                    building_preferred = True
 
         def base_score(seat: Seat) -> float:
             zone_key = (seat.building, seat.floor, seat.zone)
@@ -126,7 +155,10 @@ class SeatAllocator:
         reasoning = (
             "Beam search scoring: team_together > dept_zone_together > utilization; "
             f"selected={selected.seat_id}; team_anchor={team_anchor}; dept_anchor={dept_anchor}; "
-            f"dept_zone_lock={'on' if dept_locked else 'off'}"
+            f"dept_zone_lock={'on' if dept_locked else 'off'}; "
+            f"dept_zone_lock_relaxed={'yes' if lock_relaxed else 'no'}; "
+            f"domain_reduction_floor_pref={'yes' if floor_preferred else 'no'}; "
+            f"domain_reduction_building_pref={'yes' if building_preferred else 'no'}"
         )
 
         return Assignment(

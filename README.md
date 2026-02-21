@@ -21,9 +21,10 @@ The allocator uses a **beam-search strategy** to maximize utilization while pres
 - Priority order for seat selection: **same team**, then **same department zone cohesion**, then **zone utilization/consolidation**.
 - Same-team together: beam score strongly anchors employees to zones where their team already sits.
 - Department cohesion: teams from the same department are clustered in the same zone; if an existing department zone has capacity, allocator keeps subsequent department members there.
+- Domain reduction fallback: when constraints conflict (for example, a department anchor zone already has 2 departments), allocator relaxes the anchor lock and reduces the search to valid zones instead of halting allocation.
 - Controlled mixing: different departments can share a zone when team and department priorities are preserved.
 - Zone department cap: each zone can host employees from at most **2 departments** at a time.
-- Building/floor preference: allocator applies penalties for changing floor/building and only moves when required by score outcomes.
+- Building/floor preference: allocator first reduces candidates to the same floor (if possible), then same building, before considering other locations.
 
 ## Team ↔ Department connection in simulation
 
