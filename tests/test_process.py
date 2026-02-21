@@ -14,7 +14,7 @@ from seat_allocation_app.models import AccessEvent, Employee, Seat
 from seat_allocation_app.notifications.email_client import EmailNotifier
 from seat_allocation_app.notifications.message_client import MessageNotifier
 from seat_allocation_app.process_orchestrator import ProcessOrchestrator
-from seat_allocation_app.simulation import build_employee_directory, build_seat_topology
+from seat_allocation_app.simulation import all_departments, all_teams, build_employee_directory, build_seat_topology
 
 
 def test_orchestrator_assigns_team_cluster_and_notifies() -> None:
@@ -73,20 +73,24 @@ def test_team_department_not_split_across_zones() -> None:
     assert (assignment.building, assignment.floor, assignment.zone) == ("B1", "F1", "A")
 
 
-def test_simulation_topology_has_2000_seats_and_scale_dimensions() -> None:
+def test_simulation_topology_and_randomized_employee_scope() -> None:
     seats = build_seat_topology()
-    employees = build_employee_directory()
+    employees = build_employee_directory(seed=42)
 
-    assert len(seats) == 2000
+    assert len(seats) == 720
     assert len({seat.department for seat in seats}) == 20
-    assert len({seat.team_cluster for seat in seats}) == 100
-    assert len({employee.department for employee in employees}) == 20
-    assert len(employees) == 1000
-    assert len({employee.team for employee in employees}) == 100
+    assert len({seat.team_cluster for seat in seats}) == 40
+
+    assert len(all_departments()) == 20
+    assert len(all_teams()) == 40
+
+    assert len(employees) == 300
+    assert len({employee.department for employee in employees}) == 12
+    assert len({employee.team for employee in employees}) == 25
 
 
 def test_employee_directory_contains_card_id() -> None:
-    employees = build_employee_directory(total_employees=3)
+    employees = build_employee_directory(total_employees=3, seed=7)
     assert employees[0].card_id == "CARD-E0001"
     assert employees[1].card_id == "CARD-E0002"
 

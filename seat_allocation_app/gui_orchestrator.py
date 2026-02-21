@@ -24,18 +24,6 @@ class GUIOrchestrator:
         self._after_id: str | None = None
         self._last_seats_snapshot: list = []
 
-        self._employee_by_id = {
-            employee_id: self.process_orchestrator.employee_directory.get_employee(employee_id)
-            for employee_id in self.employee_ids
-        }
-        self._ids_by_team: dict[str, list[str]] = {}
-        self._ids_by_department: dict[str, list[str]] = {}
-        for employee_id, employee in self._employee_by_id.items():
-            if not employee:
-                continue
-            self._ids_by_team.setdefault(employee.team, []).append(employee_id)
-            self._ids_by_department.setdefault(employee.department, []).append(employee_id)
-
         self._events_since_pattern = 0
         self._pattern_interval = random.randint(4, 5)
         self._pattern_anchor_id: str | None = None
@@ -50,6 +38,7 @@ class GUIOrchestrator:
         self.reasoning_rows: list[tuple[str, ...]] = []
 
         self._build_layout()
+        self._rebuild_employee_indexes()
         self._refresh_views()
 
     def _fit_to_page(self) -> None:
@@ -66,7 +55,7 @@ class GUIOrchestrator:
 
         ttk.Label(
             header,
-            text="Real-time Seat Allocation (2 Buildings, 5 Floors, 2 Zones, 100 Seats/Zone)",
+            text="Real-time Seat Allocation (2 Buildings, 2 Floors, 3 Zones, 60 Seats/Zone)",
             font=("Arial", 14, "bold"),
         ).pack(anchor="w")
         ttk.Label(header, textvariable=self.latest_assignment_var, foreground="blue").pack(anchor="w")
@@ -90,28 +79,8 @@ class GUIOrchestrator:
         notebook.add(self.reasoning_tab, text="LIVE Reasoning")
         notebook.add(self.device_tab, text="Electrical Usage")
 
-        building_panel = ttk.Frame(self.buildings_tab)
-        building_panel.pack(fill="both", expand=True)
-
-        self.floor_start_var = tk.IntVar(value=1)
-        sidebar = ttk.Frame(building_panel, width=110)
-        sidebar.pack(side="left", fill="y", padx=(0, 6), pady=4)
-        ttk.Label(sidebar, text="Floor Sidebar", font=("Arial", 10, "bold")).pack(anchor="w", pady=(4, 6))
-        ttk.Label(sidebar, text="Select start floor").pack(anchor="w")
-        self.floor_scroll = tk.Scale(
-            sidebar,
-            from_=1,
-            to=4,
-            orient="vertical",
-            variable=self.floor_start_var,
-            command=lambda _val: self._refresh_building_canvas(self._last_seats_snapshot),
-            length=260,
-        )
-        self.floor_scroll.pack(anchor="w", pady=6)
-        ttk.Label(sidebar, text="Shows 2 floors\nat a time").pack(anchor="w")
-
-        self.building_canvas = tk.Canvas(building_panel, bg="white")
-        self.building_canvas.pack(side="left", fill="both", expand=True)
+        self.building_canvas = tk.Canvas(self.buildings_tab, bg="white")
+        self.building_canvas.pack(fill="both", expand=True)
         self.building_canvas.bind("<Configure>", self._on_canvas_resize)
 
         self.floor_tree = self._create_table_with_scrollbar(
@@ -175,7 +144,7 @@ class GUIOrchestrator:
         tree = ttk.Treeview(container, columns=columns, show="headings")
         for col in columns:
             tree.heading(col, text=col.replace("_", " ").title())
-            tree.column(col, width=160 if col == "reasoning" else 140, minwidth=110, anchor="center")
+            tree.column(col, width=170 if col == "reasoning" else 130, minwidth=100, anchor="center")
 
         y_scrollbar = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
         x_scrollbar = ttk.Scrollbar(container, orient="horizontal", command=tree.xview)
@@ -188,6 +157,19 @@ class GUIOrchestrator:
         container.rowconfigure(0, weight=1)
         container.columnconfigure(0, weight=1)
         return tree
+
+    def _rebuild_employee_indexes(self) -> None:
+        self._employee_by_id = {
+            employee_id: self.process_orchestrator.employee_directory.get_employee(employee_id)
+            for employee_id in self.employee_ids
+        }
+        self._ids_by_team: dict[str, list[str]] = {}
+        self._ids_by_department: dict[str, list[str]] = {}
+        for employee_id, employee in self._employee_by_id.items():
+            if not employee:
+                continue
+            self._ids_by_team.setdefault(employee.team, []).append(employee_id)
+            self._ids_by_department.setdefault(employee.department, []).append(employee_id)
 
     def _on_canvas_resize(self, _event: tk.Event) -> None:
         self._refresh_building_canvas(self._last_seats_snapshot)
@@ -214,11 +196,12 @@ class GUIOrchestrator:
         self.pause_simulation()
         self.process_orchestrator, self.employee_ids, self.card_by_employee = self._bootstrap_callback()
         self.employee_index = 0
-        self.live_assignment_rows = []
-        self.reasoning_rows = []
         self._events_since_pattern = 0
         self._pattern_interval = random.randint(4, 5)
         self._pattern_anchor_id = None
+        self._rebuild_employee_indexes()
+        self.live_assignment_rows = []
+        self.reasoning_rows = []
         self.latest_assignment_var.set("Simulation reset. Click Run Simulation to start demo.")
         self._refresh_views()
 
@@ -233,9 +216,6 @@ class GUIOrchestrator:
         self._schedule_next_tick(2000)
 
     def _next_employee_id(self) -> str:
-        if not self.employee_ids:
-            raise RuntimeError("No employees available for simulation")
-
         if self._events_since_pattern >= self._pattern_interval and self._pattern_anchor_id:
             anchor = self._employee_by_id.get(self._pattern_anchor_id)
             if anchor and random.choice([True, False]):
@@ -244,7 +224,6 @@ class GUIOrchestrator:
                 pool = self._ids_by_department.get(anchor.department, [self._pattern_anchor_id])
             else:
                 pool = self.employee_ids
-
             chosen = random.choice(pool)
             self._events_since_pattern = 0
             self._pattern_interval = random.randint(4, 5)
@@ -282,12 +261,7 @@ class GUIOrchestrator:
                 )
             )
             self.reasoning_rows.append(
-                (
-                    assignment.employee_id,
-                    assignment.seat_id,
-                    assigned_at,
-                    assignment.reasoning,
-                )
+                (assignment.employee_id, assignment.seat_id, assigned_at, assignment.reasoning)
             )
             self.latest_assignment_var.set(
                 f"Assigned {assignment.employee_id} -> {assignment.seat_id} "
@@ -314,23 +288,19 @@ class GUIOrchestrator:
         if not seats:
             return
 
-        start_floor = self.floor_start_var.get()
-        visible_floors = (f"F{start_floor}", f"F{min(5, start_floor + 1)}")
-
-        width = max(self.building_canvas.winfo_width(), 700)
+        width = max(self.building_canvas.winfo_width(), 760)
         height = max(self.building_canvas.winfo_height(), 460)
-        margin = max(8, width * 0.02)
+        margin = max(8, width * 0.015)
         gap = max(12, width * 0.02)
         building_width = (width - 2 * margin - gap) / 2
-        building_height = height - 60
-        y0 = 30
+        building_height = height - 50
+        y0 = 25
 
         seat_map = {
             (seat.building, seat.floor, seat.zone, int(seat.seat_id.split("-")[-1])): seat.status
             for seat in seats
-            if seat.floor in visible_floors
         }
-        zone_colors = {"A": "#35a853", "B": "#2f6df6"}
+        zone_colors = {"A": "#35a853", "B": "#2f6df6", "C": "#f9ab00"}
 
         for b_idx, building in enumerate(("B1", "B2")):
             bx0 = margin + b_idx * (building_width + gap)
@@ -338,34 +308,34 @@ class GUIOrchestrator:
             by0 = y0
             by1 = by0 + building_height
             self.building_canvas.create_rectangle(bx0, by0, bx1, by1, outline="#666", width=2)
-            self.building_canvas.create_text((bx0 + bx1) / 2, by0 - 15, text=f"Building {building}", font=("Arial", 12, "bold"))
+            self.building_canvas.create_text((bx0 + bx1) / 2, by0 - 12, text=f"Building {building}", font=("Arial", 11, "bold"))
 
-            floor_height = (building_height - 30) / 2
-            for f_idx, floor in enumerate(visible_floors):
-                fy0 = by0 + 15 + f_idx * floor_height
-                fy1 = fy0 + floor_height - 10
-                self.building_canvas.create_rectangle(bx0 + 10, fy0, bx1 - 10, fy1, outline="#999")
-                self.building_canvas.create_text(bx0 + 45, fy0 + 10, text=floor, font=("Arial", 10, "bold"))
+            floor_height = (building_height - 24) / 2
+            for f_idx, floor in enumerate(("F1", "F2")):
+                fy0 = by0 + 12 + f_idx * floor_height
+                fy1 = fy0 + floor_height - 8
+                self.building_canvas.create_rectangle(bx0 + 8, fy0, bx1 - 8, fy1, outline="#999")
+                self.building_canvas.create_text(bx0 + 40, fy0 + 10, text=floor, font=("Arial", 9, "bold"))
 
-                zone_gap = 10
-                zone_width = ((bx1 - bx0) - 40 - zone_gap) / 2
-                for z_idx, zone in enumerate(("A", "B")):
-                    zx0 = bx0 + 20 + z_idx * (zone_width + zone_gap)
+                zone_gap = 8
+                zone_width = ((bx1 - bx0) - 32 - zone_gap * 2) / 3
+                for z_idx, zone in enumerate(("A", "B", "C")):
+                    zx0 = bx0 + 16 + z_idx * (zone_width + zone_gap)
                     zx1 = zx0 + zone_width
-                    zy0 = fy0 + 25
-                    zy1 = fy1 - 12
+                    zy0 = fy0 + 20
+                    zy1 = fy1 - 8
 
                     self.building_canvas.create_rectangle(zx0, zy0, zx1, zy1, outline=zone_colors[zone], width=2)
-                    self.building_canvas.create_text((zx0 + zx1) / 2, zy0 - 10, text=f"Zone {zone}", fill=zone_colors[zone])
+                    self.building_canvas.create_text((zx0 + zx1) / 2, zy0 - 8, text=f"Zone {zone}", fill=zone_colors[zone], font=("Arial", 8, "bold"))
 
                     self._draw_seat_squares(
                         building=building,
                         floor=floor,
                         zone=zone,
-                        x0=zx0 + 4,
-                        y0=zy0 + 4,
-                        x1=zx1 - 4,
-                        y1=zy1 - 4,
+                        x0=zx0 + 3,
+                        y0=zy0 + 3,
+                        x1=zx1 - 3,
+                        y1=zy1 - 3,
                         zone_color=zone_colors[zone],
                         seat_map=seat_map,
                     )
@@ -382,12 +352,12 @@ class GUIOrchestrator:
         zone_color: str,
         seat_map: dict[tuple[str, str, str, int], str],
     ) -> None:
-        rows = 10
+        rows = 6
         cols = 10
         sq_w = (x1 - x0) / cols
         sq_h = (y1 - y0) / rows
 
-        for seat_no in range(1, 101):
+        for seat_no in range(1, 61):
             row = (seat_no - 1) // cols
             col = (seat_no - 1) % cols
             sx0 = x0 + col * sq_w + 1
@@ -404,7 +374,7 @@ class GUIOrchestrator:
 
         floors = Counter((seat.building, seat.floor, seat.status) for seat in seats)
         for building in ("B1", "B2"):
-            for floor in ("F1", "F2", "F3", "F4", "F5"):
+            for floor in ("F1", "F2"):
                 occupied = floors[(building, floor, "occupied")]
                 available = floors[(building, floor, "available")]
                 self.floor_tree.insert("", "end", values=(building, floor, occupied, available))
@@ -415,8 +385,8 @@ class GUIOrchestrator:
 
         zones = Counter((seat.building, seat.floor, seat.zone, seat.status) for seat in seats)
         for building in ("B1", "B2"):
-            for floor in ("F1", "F2", "F3", "F4", "F5"):
-                for zone in ("A", "B"):
+            for floor in ("F1", "F2"):
+                for zone in ("A", "B", "C"):
                     occupied = zones[(building, floor, zone, "occupied")]
                     available = zones[(building, floor, zone, "available")]
                     self.zone_tree.insert("", "end", values=(building, floor, zone, occupied, available))

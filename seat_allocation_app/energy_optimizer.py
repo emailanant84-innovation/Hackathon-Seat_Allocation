@@ -31,8 +31,8 @@ class EnergyOptimizer:
             known_zones = {
                 (f"B{building}", f"F{floor}", zone)
                 for building in range(1, 3)
-                for floor in range(1, 6)
-                for zone in ("A", "B")
+                for floor in range(1, 3)
+                for zone in ("A", "B", "C")
             }
 
         active_zones = set(occupied_zone_counts)

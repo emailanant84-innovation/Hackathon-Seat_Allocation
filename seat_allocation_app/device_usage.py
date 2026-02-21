@@ -25,13 +25,13 @@ def summarize_device_usage(seats: list[Seat]) -> list[DeviceUsageRow]:
 
     rows: list[DeviceUsageRow] = []
     for building in ("B1", "B2"):
-        for floor in ("F1", "F2", "F3", "F4", "F5"):
-            for zone in ("A", "B"):
+        for floor in ("F1", "F2"):
+            for zone in ("A", "B", "C"):
                 zone_seats = grouped.get((building, floor, zone), [])
                 occupied = sum(1 for seat in zone_seats if seat.status == "occupied")
-                lights_on = min(10, (occupied + 9) // 10)  # 10 light circuits / zone
+                lights_on = min(6, (occupied + 9) // 10)  # 6 light circuits for 60 seats/zone
                 routers_on = 1 if occupied else 0
-                ac_vents_on = min(4, (occupied + 24) // 25)  # 4 vents / zone
+                ac_vents_on = min(3, (occupied + 19) // 20)  # 3 vents per zone
 
                 rows.append(
                     DeviceUsageRow(

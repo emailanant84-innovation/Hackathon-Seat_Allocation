@@ -17,7 +17,7 @@ from seat_allocation_app.simulation import build_employee_directory, build_seat_
 
 
 def bootstrap_orchestrator() -> tuple[ProcessOrchestrator, list[str], dict[str, str]]:
-    employees = build_employee_directory(total_employees=1000)
+    employees = build_employee_directory(total_employees=300)
     seats = build_seat_topology()
 
     orchestrator = ProcessOrchestrator(
