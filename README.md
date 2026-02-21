@@ -10,7 +10,7 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 - Zones per floor: 3 (`A`, `B`, `C`)
 - Seats per zone: 60
 - Total capacity: 720 seats
-- Total possible departments: 20
+- Total possible departments: 15
 - Total possible teams: 40
 - Simulation employee pool: 300 employees
 - Runtime random simulation scope: 12 departments + 25 teams
@@ -21,6 +21,7 @@ The allocator uses a **beam-search strategy** with a learning cache:
 - Priority order for seat selection: **same team**, then **same department**, then **same zone density**.
 - Learning: successful placements are cached by `(department, team)` and reused for faster future decisions.
 - Strict locality rule: once a team+department has an occupied location, future members of that same team+department are constrained to the same `(building, floor, zone)`.
+- Zone-mix rule: at most **2 different departments** can coexist in the same zone.
 
 ## Modules
 

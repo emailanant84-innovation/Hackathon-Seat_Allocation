@@ -7,7 +7,7 @@ from seat_allocation_app.models import AccessEvent, Employee, Seat
 
 
 def all_departments() -> list[str]:
-    return [f"Department-{index:02d}" for index in range(1, 21)]
+    return [f"Department-{index:02d}" for index in range(1, 16)]
 
 
 def all_teams() -> list[str]:

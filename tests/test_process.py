@@ -73,15 +73,34 @@ def test_team_department_not_split_across_zones() -> None:
     assert (assignment.building, assignment.floor, assignment.zone) == ("B1", "F1", "A")
 
 
+
+
+def test_zone_allows_at_most_two_departments() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E3", "CARD-E3", "Casey", "c@x", "+3", "Dept-C", "Team-C")
+
+    all_seats = [
+        Seat("S1", "B1", "F1", "A", "Dept-A", "Team-1", status="occupied", occupied_by="EA"),
+        Seat("S2", "B1", "F1", "A", "Dept-B", "Team-2", status="occupied", occupied_by="EB"),
+        Seat("S3", "B1", "F1", "A", "Dept-C", "Team-C"),
+        Seat("S4", "B1", "F1", "B", "Dept-C", "Team-C"),
+    ]
+
+    candidates = [all_seats[2], all_seats[3]]
+    assignment = allocator.select_seat(employee, candidates, all_seats)
+
+    assert assignment is not None
+    assert assignment.zone == "B"
+
 def test_simulation_topology_and_randomized_employee_scope() -> None:
     seats = build_seat_topology()
     employees = build_employee_directory(seed=42)
 
     assert len(seats) == 720
-    assert len({seat.department for seat in seats}) == 20
+    assert len({seat.department for seat in seats}) == 15
     assert len({seat.team_cluster for seat in seats}) == 40
 
-    assert len(all_departments()) == 20
+    assert len(all_departments()) == 15
     assert len(all_teams()) == 40
 
     assert len(employees) == 300

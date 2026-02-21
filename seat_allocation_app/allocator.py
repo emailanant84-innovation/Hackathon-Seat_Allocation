@@ -39,6 +39,10 @@ class SeatAllocator:
             if not candidate_seats:
                 return None
 
+        candidate_seats = self._enforce_zone_department_limit(candidate_seats, all_seats, employee.department)
+        if not candidate_seats:
+            return None
+
         ranked = self._beam_search_ranked_candidates(team_key, candidate_seats, all_seats)
         if not ranked:
             return None
@@ -56,7 +60,8 @@ class SeatAllocator:
 
         reasoning = (
             "Beam search ranking: same_team > same_department > same_zone_density; "
-            f"selected={selected.seat_id}; {locality_reason or 'new locality learned'}"
+            f"selected={selected.seat_id}; {locality_reason or 'new locality learned'}; "
+            "zone has max 2 departments"
         )
 
         return Assignment(
@@ -88,6 +93,26 @@ class SeatAllocator:
                 self.learned_location_by_team[team_key] = location
                 return location
         return None
+
+    def _enforce_zone_department_limit(
+        self,
+        candidates: list[Seat],
+        all_seats: list[Seat],
+        employee_department: str,
+    ) -> list[Seat]:
+        zone_departments: dict[tuple[str, str, str], set[str]] = {}
+        for seat in all_seats:
+            if seat.status == "occupied":
+                key = (seat.building, seat.floor, seat.zone)
+                zone_departments.setdefault(key, set()).add(seat.department)
+
+        filtered: list[Seat] = []
+        for seat in candidates:
+            key = (seat.building, seat.floor, seat.zone)
+            depts = zone_departments.get(key, set())
+            if employee_department in depts or len(depts) < 2:
+                filtered.append(seat)
+        return filtered
 
     def _beam_search_ranked_candidates(
         self,
