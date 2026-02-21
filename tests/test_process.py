@@ -175,6 +175,61 @@ def test_prefers_same_floor_before_other_floor_or_building() -> None:
     assert assignment.building == "B1"
     assert assignment.floor == "F1"
 
+
+
+def test_zone_cap_uses_actual_occupied_department_not_seat_template() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E13", "CARD-E13", "Ira", "i@x", "+13", "Dept-C", "Team-C2")
+
+    all_seats = [
+        Seat(
+            "S-B1-F1-A-001",
+            "B1",
+            "F1",
+            "A",
+            "Dept-A",
+            "Team-A1",
+            status="occupied",
+            occupied_by="E1",
+            occupied_department="Dept-A",
+            occupied_team="Team-A1",
+        ),
+        Seat(
+            "S-B1-F1-A-002",
+            "B1",
+            "F1",
+            "A",
+            "Dept-A",
+            "Team-A1",
+            status="occupied",
+            occupied_by="E2",
+            occupied_department="Dept-B",
+            occupied_team="Team-B2",
+        ),
+        Seat("S-B1-F1-A-003", "B1", "F1", "A", "Dept-A", "Team-A1"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-C", "Team-C2"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[2], all_seats[3]], all_seats)
+    assert assignment is not None
+    assert assignment.zone == "B"
+
+
+def test_floor_preference_follows_current_occupied_floor_when_no_anchor() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E14", "CARD-E14", "Uma", "u@x", "+14", "Dept-X", "Team-X1")
+
+    all_seats = [
+        Seat("S-B2-F2-A-001", "B2", "F2", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E1"),
+        Seat("S-B2-F2-A-002", "B2", "F2", "A", "Dept-X", "Team-X1"),
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-X", "Team-X1"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2]], all_seats)
+    assert assignment is not None
+    assert assignment.building == "B2"
+    assert assignment.floor == "F2"
+
 def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()
     employees = build_employee_directory(seed=42)

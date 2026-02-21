@@ -22,10 +22,12 @@ class SeatInventoryClient:
                 counts[(seat.building, seat.floor, seat.zone)] += 1
         return counts
 
-    def mark_occupied(self, seat_id: str, employee_id: str) -> None:
+    def mark_occupied(self, seat_id: str, employee_id: str, department: str, team: str) -> None:
         seat = self._seats[seat_id]
         seat.status = "occupied"
         seat.occupied_by = employee_id
+        seat.occupied_department = department
+        seat.occupied_team = team
 
     def all_seats(self) -> list[Seat]:
         return list(self._seats.values())

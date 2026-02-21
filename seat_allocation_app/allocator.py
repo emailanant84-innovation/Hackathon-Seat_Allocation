@@ -28,15 +28,22 @@ class SeatAllocator:
         team_zone_counts = Counter()
         dept_zone_counts = Counter()
         zone_load = Counter()
+        floor_load = Counter()
         zone_departments: dict[tuple[str, str, str], set[str]] = {}
 
         for seat in occupied:
             zone_key = (seat.building, seat.floor, seat.zone)
+            floor_key = (seat.building, seat.floor)
+            occupied_department = seat.occupied_department or seat.department
+            occupied_team = seat.occupied_team or seat.team_cluster
+
             zone_load[zone_key] += 1
-            zone_departments.setdefault(zone_key, set()).add(seat.department)
-            if seat.department == employee.department:
+            floor_load[floor_key] += 1
+            zone_departments.setdefault(zone_key, set()).add(occupied_department)
+
+            if occupied_department == employee.department:
                 dept_zone_counts[zone_key] += 1
-                if seat.team_cluster == employee.team:
+                if occupied_team == employee.team:
                     team_zone_counts[zone_key] += 1
 
         team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
@@ -54,8 +61,6 @@ class SeatAllocator:
                 candidate_seats = dept_zone_candidates
                 dept_locked = True
 
-        # Domain reduction pass 1: exclude seats that would create a 3rd department in the zone.
-        # If the department lock causes an empty domain, relax the lock and reduce the broader domain.
         def enforce_zone_department_cap(seats: list[Seat]) -> list[Seat]:
             return [
                 seat
@@ -63,7 +68,10 @@ class SeatAllocator:
                 if len(zone_departments.get((seat.building, seat.floor, seat.zone), set()) | {employee.department}) <= 2
             ]
 
+        # Domain reduction pass 1: keep only zone-cap-valid candidates.
         candidate_seats = enforce_zone_department_cap(candidate_seats)
+
+        # If dept-zone lock over-constrains domain, relax lock and retry with original candidates.
         lock_relaxed = False
         if not candidate_seats and dept_locked:
             candidate_seats = enforce_zone_department_cap(original_candidates)
@@ -72,45 +80,46 @@ class SeatAllocator:
         if not candidate_seats:
             return None
 
-        # Domain reduction pass 2: prefer same floor first, then same building.
-        anchor_zone = team_anchor or dept_anchor
+        # Domain reduction pass 2: strict floor-first, then building-first.
         floor_preferred = False
         building_preferred = False
-        if anchor_zone:
-            same_floor = [
-                seat
-                for seat in candidate_seats
-                if (seat.building, seat.floor) == (anchor_zone[0], anchor_zone[1])
-            ]
-            if same_floor:
-                candidate_seats = same_floor
-                floor_preferred = True
-            else:
-                same_building = [seat for seat in candidate_seats if seat.building == anchor_zone[0]]
-                if same_building:
-                    candidate_seats = same_building
-                    building_preferred = True
+
+        preferred_floor: tuple[str, str] | None = None
+        if team_anchor:
+            preferred_floor = (team_anchor[0], team_anchor[1])
+        elif dept_anchor:
+            preferred_floor = (dept_anchor[0], dept_anchor[1])
+        elif floor_load:
+            preferred_floor = floor_load.most_common(1)[0][0]
+        else:
+            preferred_floor = min((seat.building, seat.floor) for seat in candidate_seats)
+
+        same_floor = [seat for seat in candidate_seats if (seat.building, seat.floor) == preferred_floor]
+        if same_floor:
+            candidate_seats = same_floor
+            floor_preferred = True
+
+        same_building = [seat for seat in candidate_seats if seat.building == preferred_floor[0]]
+        if same_building:
+            candidate_seats = same_building
+            building_preferred = True
 
         def base_score(seat: Seat) -> float:
             zone_key = (seat.building, seat.floor, seat.zone)
             score = 0.0
 
-            # 1) same team together (strongest)
             if team_anchor and zone_key == team_anchor:
                 score += 10_000
             score += team_zone_counts.get(zone_key, 0) * 1_200
             score += 500 if seat.team_cluster == employee.team else 0
 
-            # 2) teams from same department together in zone
             if dept_anchor and zone_key == dept_anchor:
                 score += 2_500
             score += dept_zone_counts.get(zone_key, 0) * 350
             score += 80 if seat.department == employee.department else 0
 
-            # 3) maximize utilization by consolidating occupied zones
             score += zone_load.get(zone_key, 0) * 14
 
-            # go to different floor/building only when required
             if team_anchor and zone_key[:2] != team_anchor[:2]:
                 score -= 180
             if dept_anchor and zone_key[:2] != dept_anchor[:2]:

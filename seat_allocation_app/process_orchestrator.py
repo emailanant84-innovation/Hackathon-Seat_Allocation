@@ -49,7 +49,12 @@ class ProcessOrchestrator:
             )
             return None
 
-        self.seat_inventory.mark_occupied(assignment.seat_id, employee.employee_id)
+        self.seat_inventory.mark_occupied(
+            assignment.seat_id,
+            employee.employee_id,
+            employee.department,
+            employee.team,
+        )
         self.email_notifier.send_seat_assignment(employee, assignment)
         self.message_notifier.send_seat_assignment(employee, assignment)
 

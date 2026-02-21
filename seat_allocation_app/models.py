@@ -36,6 +36,8 @@ class Seat:
     team_cluster: str
     status: SeatStatus = "available"
     occupied_by: str | None = None
+    occupied_department: str | None = None
+    occupied_team: str | None = None
 
 
 @dataclass(slots=True)
