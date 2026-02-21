@@ -7,11 +7,11 @@ from seat_allocation_app.models import AccessEvent, Employee, Seat
 
 
 def all_departments() -> list[str]:
-    return [f"Department-{index:02d}" for index in range(1, 16)]
+    return [f"Department-{index:02d}" for index in range(1, 11)]
 
 
 def all_teams() -> list[str]:
-    return [f"Team-{index:03d}" for index in range(1, 41)]
+    return [f"Team-{index:03d}" for index in range(1, 26)]
 
 
 def team_department_map() -> dict[str, str]:
@@ -47,7 +47,7 @@ def build_seat_topology() -> list[Seat]:
 
 def build_employee_directory(
     total_employees: int = 300,
-    active_departments: int = 12,
+    active_departments: int = 10,
     active_teams: int = 25,
     seed: int | None = None,
 ) -> list[Employee]:

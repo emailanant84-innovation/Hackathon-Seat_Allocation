@@ -10,10 +10,10 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 - Zones per floor: 3 (`A`, `B`, `C`)
 - Seats per zone: 60
 - Total capacity: 720 seats
-- Total possible departments: 15
-- Total possible teams: 40
+- Total possible departments: 10
+- Total possible teams: 25
 - Simulation employee pool: 300 employees
-- Runtime random simulation scope: 12 departments + 25 teams
+- Runtime simulation scope: same 10 departments + 25 teams
 
 ## Seat allocation algorithm
 
@@ -29,13 +29,13 @@ The allocator uses a **beam-search strategy** to maximize utilization while pres
 Simulation maintains a deterministic mapping between teams and departments (`team_department_map()`):
 - Every team belongs to exactly one department.
 - Seat topology and employee generation use the same mapping.
-- The allocator then uses this consistent relationship (employee team+department and seat team+department) while making beam-search decisions.
+- The allocator uses this same connection while scoring seats.
 
 ## Modules
 
 - `seat_allocation_app/process_orchestrator.py`: Main workflow orchestrator.
 - `seat_allocation_app/allocator.py`: Beam-search seat allocator maximizing utilization with locality constraints.
-- `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, scrollbars, live assignment tab, live reasoning tab, and electrical usage tab.
+- `seat_allocation_app/gui_orchestrator.py`: Top-level GUI orchestrator with run/pause/reset controls, responsive graphics, scrollbars, live assignment tabs, and electrical usage tab.
 - `seat_allocation_app/device_usage.py`: Electrical device usage summary calculator.
 - `seat_allocation_app/logging_orchestrator.py`: Centralized activity logging orchestrator.
 - `seat_allocation_app/data_sources/access_stream.py`: Access-management live stream adapter.
@@ -60,9 +60,13 @@ Tabs:
 - **Floors**
 - **Zones**
 - **Seats**
-- **LIVE Seat Assignments** (employee details, seat, and assignment time)
-- **LIVE Reasoning** (allocator reasoning string for each live assignment)
+- **LIVE Seat Assignments** (live assignment stream)
+- **LIVE Assignments Ordered** (ordered by department-team map, zone, floor, building)
 - **Electrical Usage** (lights, routers, monitors, desktop CPUs, AC vents usage summary)
+
+Buildings tab color behavior:
+- Occupied seats are colored by **department**.
+- Zone-based coloring has been removed.
 
 Event simulation behavior:
 - Simulation interval is **2 seconds**.

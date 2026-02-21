@@ -35,7 +35,6 @@ class GUIOrchestrator:
 
         self.latest_assignment_var = tk.StringVar(value="Waiting for first access event...")
         self.live_assignment_rows: list[tuple[str, ...]] = []
-        self.reasoning_rows: list[tuple[str, ...]] = []
 
         self._build_layout()
         self._rebuild_employee_indexes()
@@ -68,7 +67,7 @@ class GUIOrchestrator:
         self.zones_tab = ttk.Frame(notebook)
         self.seats_tab = ttk.Frame(notebook)
         self.live_tab = ttk.Frame(notebook)
-        self.reasoning_tab = ttk.Frame(notebook)
+        self.live_ordered_tab = ttk.Frame(notebook)
         self.device_tab = ttk.Frame(notebook)
 
         notebook.add(self.buildings_tab, text="Buildings")
@@ -76,7 +75,7 @@ class GUIOrchestrator:
         notebook.add(self.zones_tab, text="Zones")
         notebook.add(self.seats_tab, text="Seats")
         notebook.add(self.live_tab, text="LIVE Seat Assignments")
-        notebook.add(self.reasoning_tab, text="LIVE Reasoning")
+        notebook.add(self.live_ordered_tab, text="LIVE Assignments Ordered")
         notebook.add(self.device_tab, text="Electrical Usage")
 
         self.building_canvas = tk.Canvas(self.buildings_tab, bg="white")
@@ -95,25 +94,21 @@ class GUIOrchestrator:
             self.seats_tab,
             ("seat_id", "building", "floor", "zone", "status", "occupied_by"),
         )
-        self.live_tree = self._create_table_with_scrollbar(
-            self.live_tab,
-            (
-                "employee_id",
-                "employee_name",
-                "card_id",
-                "department",
-                "team",
-                "seat_id",
-                "building",
-                "floor",
-                "zone",
-                "assigned_at",
-            ),
+        live_columns = (
+            "employee_id",
+            "employee_name",
+            "card_id",
+            "department",
+            "team",
+            "seat_id",
+            "building",
+            "floor",
+            "zone",
+            "assigned_at",
         )
-        self.reasoning_tree = self._create_table_with_scrollbar(
-            self.reasoning_tab,
-            ("employee_id", "seat_id", "assigned_at", "reasoning"),
-        )
+        self.live_tree = self._create_table_with_scrollbar(self.live_tab, live_columns)
+        self.live_ordered_tree = self._create_table_with_scrollbar(self.live_ordered_tab, live_columns)
+
         self.device_tree = self._create_table_with_scrollbar(
             self.device_tab,
             (
@@ -144,7 +139,7 @@ class GUIOrchestrator:
         tree = ttk.Treeview(container, columns=columns, show="headings")
         for col in columns:
             tree.heading(col, text=col.replace("_", " ").title())
-            tree.column(col, width=170 if col == "reasoning" else 130, minwidth=100, anchor="center")
+            tree.column(col, width=130, minwidth=100, anchor="center")
 
         y_scrollbar = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
         x_scrollbar = ttk.Scrollbar(container, orient="horizontal", command=tree.xview)
@@ -170,6 +165,16 @@ class GUIOrchestrator:
                 continue
             self._ids_by_team.setdefault(employee.team, []).append(employee_id)
             self._ids_by_department.setdefault(employee.department, []).append(employee_id)
+
+        dept_palette = [
+            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+        ]
+        depts = sorted(self._ids_by_department.keys())
+        self._dept_colors = {
+            dept: dept_palette[idx % len(dept_palette)]
+            for idx, dept in enumerate(depts)
+        }
 
     def _on_canvas_resize(self, _event: tk.Event) -> None:
         self._refresh_building_canvas(self._last_seats_snapshot)
@@ -201,7 +206,6 @@ class GUIOrchestrator:
         self._pattern_anchor_id = None
         self._rebuild_employee_indexes()
         self.live_assignment_rows = []
-        self.reasoning_rows = []
         self.latest_assignment_var.set("Simulation reset. Click Run Simulation to start demo.")
         self._refresh_views()
 
@@ -260,9 +264,6 @@ class GUIOrchestrator:
                     assigned_at,
                 )
             )
-            self.reasoning_rows.append(
-                (assignment.employee_id, assignment.seat_id, assigned_at, assignment.reasoning)
-            )
             self.latest_assignment_var.set(
                 f"Assigned {assignment.employee_id} -> {assignment.seat_id} "
                 f"({assignment.building}/{assignment.floor}/{assignment.zone})"
@@ -280,7 +281,7 @@ class GUIOrchestrator:
         self._refresh_zone_table(seats)
         self._refresh_seat_table(seats)
         self._refresh_live_assignment_table()
-        self._refresh_reasoning_table()
+        self._refresh_live_ordered_assignment_table()
         self._refresh_device_usage_table(seats)
 
     def _refresh_building_canvas(self, seats: list) -> None:
@@ -297,10 +298,12 @@ class GUIOrchestrator:
         y0 = 25
 
         seat_map = {
-            (seat.building, seat.floor, seat.zone, int(seat.seat_id.split("-")[-1])): seat.status
+            (seat.building, seat.floor, seat.zone, int(seat.seat_id.split("-")[-1])): (
+                seat.status,
+                seat.department,
+            )
             for seat in seats
         }
-        zone_colors = {"A": "#35a853", "B": "#2f6df6", "C": "#f9ab00"}
 
         for b_idx, building in enumerate(("B1", "B2")):
             bx0 = margin + b_idx * (building_width + gap)
@@ -325,8 +328,8 @@ class GUIOrchestrator:
                     zy0 = fy0 + 20
                     zy1 = fy1 - 8
 
-                    self.building_canvas.create_rectangle(zx0, zy0, zx1, zy1, outline=zone_colors[zone], width=2)
-                    self.building_canvas.create_text((zx0 + zx1) / 2, zy0 - 8, text=f"Zone {zone}", fill=zone_colors[zone], font=("Arial", 8, "bold"))
+                    self.building_canvas.create_rectangle(zx0, zy0, zx1, zy1, outline="#888", width=2)
+                    self.building_canvas.create_text((zx0 + zx1) / 2, zy0 - 8, text=f"Zone {zone}", fill="#444", font=("Arial", 8, "bold"))
 
                     self._draw_seat_squares(
                         building=building,
@@ -336,7 +339,6 @@ class GUIOrchestrator:
                         y0=zy0 + 3,
                         x1=zx1 - 3,
                         y1=zy1 - 3,
-                        zone_color=zone_colors[zone],
                         seat_map=seat_map,
                     )
 
@@ -349,8 +351,7 @@ class GUIOrchestrator:
         y0: float,
         x1: float,
         y1: float,
-        zone_color: str,
-        seat_map: dict[tuple[str, str, str, int], str],
+        seat_map: dict[tuple[str, str, str, int], tuple[str, str]],
     ) -> None:
         rows = 6
         cols = 10
@@ -364,8 +365,8 @@ class GUIOrchestrator:
             sy0 = y0 + row * sq_h + 1
             sx1 = sx0 + sq_w - 2
             sy1 = sy0 + sq_h - 2
-            status = seat_map.get((building, floor, zone, seat_no), "available")
-            fill = zone_color if status == "occupied" else "#e6e6e6"
+            status, department = seat_map.get((building, floor, zone, seat_no), ("available", ""))
+            fill = self._dept_colors.get(department, "#9aa0a6") if status == "occupied" else "#e6e6e6"
             self.building_canvas.create_rectangle(sx0, sy0, sx1, sy1, fill=fill, outline="#c9c9c9")
 
     def _refresh_floor_table(self, seats: list) -> None:
@@ -416,12 +417,16 @@ class GUIOrchestrator:
         for row in reversed(self.live_assignment_rows):
             self.live_tree.insert("", "end", values=row)
 
-    def _refresh_reasoning_table(self) -> None:
-        for item in self.reasoning_tree.get_children():
-            self.reasoning_tree.delete(item)
+    def _refresh_live_ordered_assignment_table(self) -> None:
+        for item in self.live_ordered_tree.get_children():
+            self.live_ordered_tree.delete(item)
 
-        for row in reversed(self.reasoning_rows):
-            self.reasoning_tree.insert("", "end", values=row)
+        def sort_key(row: tuple[str, ...]) -> tuple[str, str, str, str, str]:
+            # department, team map, zone, floor, building
+            return (row[3], row[4], row[8], row[7], row[6])
+
+        for row in sorted(self.live_assignment_rows, key=sort_key):
+            self.live_ordered_tree.insert("", "end", values=row)
 
     def _refresh_device_usage_table(self, seats: list) -> None:
         for item in self.device_tree.get_children():

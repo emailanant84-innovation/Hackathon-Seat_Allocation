@@ -98,11 +98,11 @@ def test_simulation_topology_and_team_department_connection() -> None:
     mapping = team_department_map()
 
     assert len(seats) == 720
-    assert len({seat.department for seat in seats}) == 15
-    assert len({seat.team_cluster for seat in seats}) == 40
+    assert len({seat.department for seat in seats}) == 10
+    assert len({seat.team_cluster for seat in seats}) == 25
 
-    assert len(all_departments()) == 15
-    assert len(all_teams()) == 40
+    assert len(all_departments()) == 10
+    assert len(all_teams()) == 25
 
     # connection between team and department is consistent in both seats and employees
     for seat in seats[:100]:
@@ -111,7 +111,7 @@ def test_simulation_topology_and_team_department_connection() -> None:
         assert mapping[employee.team] == employee.department
 
     assert len(employees) == 300
-    assert len({employee.department for employee in employees}) == 12
+    assert len({employee.department for employee in employees}) == 10
     assert len({employee.team for employee in employees}) == 25
 
 
