@@ -40,6 +40,16 @@ class SeatAllocator:
         team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
         dept_anchor = dept_zone_counts.most_common(1)[0][0] if dept_zone_counts else None
 
+        # Hard rule: keep same-department employees in the same zone when that zone still has capacity.
+        dept_locked = False
+        if dept_anchor:
+            dept_zone_candidates = [
+                seat for seat in candidate_seats if (seat.building, seat.floor, seat.zone) == dept_anchor
+            ]
+            if dept_zone_candidates:
+                candidate_seats = dept_zone_candidates
+                dept_locked = True
+
         def base_score(seat: Seat) -> float:
             zone_key = (seat.building, seat.floor, seat.zone)
             score = 0.0
@@ -65,19 +75,26 @@ class SeatAllocator:
             if dept_anchor and zone_key[:2] != dept_anchor[:2]:
                 score -= 75
 
-            # deterministic tie break
             suffix = seat.seat_id.split("-")[-1]
             score -= (int(suffix) if suffix.isdigit() else 0) * 0.001
             return score
 
         def lookahead_score(seat: Seat) -> float:
-            """One-step beam lookahead: keeps room for same-team / same-dept clustering."""
             zone_key = (seat.building, seat.floor, seat.zone)
             remaining_same_team = sum(
-                1 for s in available if s.seat_id != seat.seat_id and s.team_cluster == employee.team and s.department == employee.department and (s.building, s.floor, s.zone) == zone_key
+                1
+                for s in available
+                if s.seat_id != seat.seat_id
+                and s.team_cluster == employee.team
+                and s.department == employee.department
+                and (s.building, s.floor, s.zone) == zone_key
             )
             remaining_same_dept = sum(
-                1 for s in available if s.seat_id != seat.seat_id and s.department == employee.department and (s.building, s.floor, s.zone) == zone_key
+                1
+                for s in available
+                if s.seat_id != seat.seat_id
+                and s.department == employee.department
+                and (s.building, s.floor, s.zone) == zone_key
             )
             return remaining_same_team * 120 + remaining_same_dept * 18
 
@@ -97,7 +114,7 @@ class SeatAllocator:
         reasoning = (
             "Beam search scoring: team_together > dept_zone_together > utilization; "
             f"selected={selected.seat_id}; team_anchor={team_anchor}; dept_anchor={dept_anchor}; "
-            "cross-department allowed when team/department cohesion remains strongest"
+            f"dept_zone_lock={'on' if dept_locked else 'off'}"
         )
 
         return Assignment(

@@ -20,7 +20,7 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 The allocator uses a **beam-search strategy** to maximize utilization while preserving locality:
 - Priority order for seat selection: **same team**, then **same department zone cohesion**, then **zone utilization/consolidation**.
 - Same-team together: beam score strongly anchors employees to zones where their team already sits.
-- Department cohesion: teams from the same department are preferentially clustered in the same zone.
+- Department cohesion: teams from the same department are clustered in the same zone; if an existing department zone has capacity, allocator keeps subsequent department members there.
 - Controlled mixing: different departments can share a zone when team and department priorities are preserved.
 - Building/floor preference: allocator applies penalties for changing floor/building and only moves when required by score outcomes.
 

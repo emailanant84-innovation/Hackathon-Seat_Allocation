@@ -92,6 +92,22 @@ def test_department_teams_cluster_in_zone() -> None:
     assert assignment.zone == "A"
 
 
+
+
+def test_same_department_stays_same_zone_when_capacity_exists() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E4", "CARD-E4", "Jo", "j@x", "+4", "Dept-A", "Team-Q")
+
+    all_seats = [
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-Z", status="occupied", occupied_by="E1"),
+        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-Q"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-A", "Team-Q"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2]], all_seats)
+    assert assignment is not None
+    assert assignment.zone == "A"
+
 def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()
     employees = build_employee_directory(seed=42)
