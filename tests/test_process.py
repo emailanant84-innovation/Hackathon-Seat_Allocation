@@ -108,6 +108,38 @@ def test_same_department_stays_same_zone_when_capacity_exists() -> None:
     assert assignment is not None
     assert assignment.zone == "A"
 
+
+
+def test_zone_rejects_third_department() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E9", "CARD-E9", "Kai", "k@x", "+9", "Dept-C", "Team-C1")
+
+    all_seats = [
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E1"),
+        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-B", "Team-B1", status="occupied", occupied_by="E2"),
+        Seat("S-B1-F1-A-003", "B1", "F1", "A", "Dept-C", "Team-C1"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-C", "Team-C1"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[2], all_seats[3]], all_seats)
+    assert assignment is not None
+    assert assignment.zone == "B"
+
+
+def test_zone_allows_second_department() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E10", "CARD-E10", "Lee", "l@x", "+10", "Dept-B", "Team-B1")
+
+    all_seats = [
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E1"),
+        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-B", "Team-B1"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-B", "Team-B1"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2]], all_seats)
+    assert assignment is not None
+    assert assignment.zone == "A"
+
 def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()
     employees = build_employee_directory(seed=42)

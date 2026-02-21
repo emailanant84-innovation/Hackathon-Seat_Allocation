@@ -28,10 +28,12 @@ class SeatAllocator:
         team_zone_counts = Counter()
         dept_zone_counts = Counter()
         zone_load = Counter()
+        zone_departments: dict[tuple[str, str, str], set[str]] = {}
 
         for seat in occupied:
             zone_key = (seat.building, seat.floor, seat.zone)
             zone_load[zone_key] += 1
+            zone_departments.setdefault(zone_key, set()).add(seat.department)
             if seat.department == employee.department:
                 dept_zone_counts[zone_key] += 1
                 if seat.team_cluster == employee.team:
@@ -49,6 +51,16 @@ class SeatAllocator:
             if dept_zone_candidates:
                 candidate_seats = dept_zone_candidates
                 dept_locked = True
+
+        # Hard rule: at most two unique departments can occupy any single zone.
+        candidate_seats = [
+            seat
+            for seat in candidate_seats
+            if len(zone_departments.get((seat.building, seat.floor, seat.zone), set()) | {employee.department}) <= 2
+        ]
+
+        if not candidate_seats:
+            return None
 
         def base_score(seat: Seat) -> float:
             zone_key = (seat.building, seat.floor, seat.zone)
