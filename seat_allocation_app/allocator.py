@@ -48,6 +48,7 @@ class SeatAllocator:
 
         team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
         dept_anchor = dept_zone_counts.most_common(1)[0][0] if dept_zone_counts else None
+        dept_zones_by_strength = [zone for zone, _count in dept_zone_counts.most_common()]
 
         original_candidates = list(candidate_seats)
 
@@ -71,10 +72,20 @@ class SeatAllocator:
         # Domain reduction pass 1: keep only zone-cap-valid candidates.
         candidate_seats = enforce_zone_department_cap(candidate_seats)
 
-        # If dept-zone lock over-constrains domain, relax lock and retry with original candidates.
+        # If dept-zone lock over-constrains domain, relax lock in a controlled way:
+        # prefer other zones that already host this department before global fallback.
         lock_relaxed = False
         if not candidate_seats and dept_locked:
-            candidate_seats = enforce_zone_department_cap(original_candidates)
+            cap_valid_original = enforce_zone_department_cap(original_candidates)
+            prioritized_dept_zones = [
+                seat
+                for seat in cap_valid_original
+                if (seat.building, seat.floor, seat.zone) in set(dept_zones_by_strength)
+            ]
+            if prioritized_dept_zones:
+                candidate_seats = prioritized_dept_zones
+            else:
+                candidate_seats = cap_valid_original
             lock_relaxed = True
 
         if not candidate_seats:
@@ -166,6 +177,7 @@ class SeatAllocator:
             f"selected={selected.seat_id}; team_anchor={team_anchor}; dept_anchor={dept_anchor}; "
             f"dept_zone_lock={'on' if dept_locked else 'off'}; "
             f"dept_zone_lock_relaxed={'yes' if lock_relaxed else 'no'}; "
+            f"dept_lock_relax_mode={'dept_zone_priority' if lock_relaxed else 'n/a'}; "
             f"domain_reduction_floor_pref={'yes' if floor_preferred else 'no'}; "
             f"domain_reduction_building_pref={'yes' if building_preferred else 'no'}"
         )

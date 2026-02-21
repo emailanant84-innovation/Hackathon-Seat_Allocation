@@ -230,6 +230,31 @@ def test_floor_preference_follows_current_occupied_floor_when_no_anchor() -> Non
     assert assignment.building == "B2"
     assert assignment.floor == "F2"
 
+
+
+def test_relaxed_dept_lock_prioritizes_other_existing_dept_zone() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E15", "CARD-E15", "Rin", "r@x", "+15", "Dept-A", "Team-A9")
+
+    all_seats = [
+        # Strongest department anchor zone A, but it already has Dept-B and Dept-C -> invalid for Dept-A under cap.
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E1", occupied_department="Dept-A", occupied_team="Team-A1"),
+        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E2", occupied_department="Dept-B", occupied_team="Team-B1"),
+        Seat("S-B1-F1-A-003", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E3", occupied_department="Dept-C", occupied_team="Team-C1"),
+        # Another existing Dept-A zone C should be preferred when lock relaxes.
+        Seat("S-B1-F1-C-001", "B1", "F1", "C", "Dept-A", "Team-A2", status="occupied", occupied_by="E4", occupied_department="Dept-A", occupied_team="Team-A2"),
+        # Candidates
+        Seat("S-B1-F1-A-010", "B1", "F1", "A", "Dept-A", "Team-A9"),
+        Seat("S-B1-F1-C-010", "B1", "F1", "C", "Dept-A", "Team-A9"),
+        Seat("S-B2-F2-B-010", "B2", "F2", "B", "Dept-A", "Team-A9"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[4], all_seats[5], all_seats[6]], all_seats)
+    assert assignment is not None
+    assert assignment.zone == "C"
+    assert assignment.building == "B1"
+    assert assignment.floor == "F1"
+
 def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()
     employees = build_employee_directory(seed=42)
