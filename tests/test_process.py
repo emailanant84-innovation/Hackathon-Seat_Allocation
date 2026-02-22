@@ -142,7 +142,7 @@ def test_zone_allows_second_department() -> None:
 
 
 
-def test_hard_dept_lock_returns_none_when_anchor_zone_is_cap_blocked() -> None:
+def test_dept_lock_relaxes_when_anchor_zone_is_cap_blocked() -> None:
     allocator = SeatAllocator()
     employee = Employee("E11", "CARD-E11", "Mia", "m@x", "+11", "Dept-A", "Team-A2")
 
@@ -155,7 +155,8 @@ def test_hard_dept_lock_returns_none_when_anchor_zone_is_cap_blocked() -> None:
     ]
 
     assignment = allocator.select_seat(employee, [all_seats[3], all_seats[4]], all_seats)
-    assert assignment is None
+    assert assignment is not None
+    assert assignment.zone == "B"
 
 
 def test_prefers_same_floor_before_other_floor_or_building() -> None:
@@ -231,7 +232,7 @@ def test_floor_preference_follows_current_occupied_floor_when_no_anchor() -> Non
 
 
 
-def test_hard_dept_lock_does_not_fallback_to_other_zones() -> None:
+def test_relaxed_dept_lock_falls_back_to_other_valid_dept_zone() -> None:
     allocator = SeatAllocator()
     employee = Employee("E15", "CARD-E15", "Rin", "r@x", "+15", "Dept-A", "Team-A9")
 
@@ -240,7 +241,7 @@ def test_hard_dept_lock_does_not_fallback_to_other_zones() -> None:
         Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E1", occupied_department="Dept-A", occupied_team="Team-A1"),
         Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E2", occupied_department="Dept-B", occupied_team="Team-B1"),
         Seat("S-B1-F1-A-003", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E3", occupied_department="Dept-C", occupied_team="Team-C1"),
-        # Another Dept-A zone exists, but hard lock must not fallback to it.
+        # Another Dept-A zone exists and should be used as fallback.
         Seat("S-B1-F1-C-001", "B1", "F1", "C", "Dept-A", "Team-A2", status="occupied", occupied_by="E4", occupied_department="Dept-A", occupied_team="Team-A2"),
         # Candidates
         Seat("S-B1-F1-A-010", "B1", "F1", "A", "Dept-A", "Team-A9"),
@@ -249,7 +250,10 @@ def test_hard_dept_lock_does_not_fallback_to_other_zones() -> None:
     ]
 
     assignment = allocator.select_seat(employee, [all_seats[4], all_seats[5], all_seats[6]], all_seats)
-    assert assignment is None
+    assert assignment is not None
+    assert assignment.zone == "C"
+    assert assignment.building == "B1"
+    assert assignment.floor == "F1"
 
 
 
@@ -309,6 +313,22 @@ def test_same_team_prefers_nearby_seat_numbers_within_zone() -> None:
     assert assignment.seat_id == "S-B1-F1-A-050"
 
 
+
+
+
+def test_prefers_anchor_zone_when_anchor_seats_still_available() -> None:
+    allocator = SeatAllocator()
+    employee = Employee("E30", "CARD-E30", "Ana", "a@x", "+30", "Dept-A", "Team-Q")
+
+    all_seats = [
+        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-Z", status="occupied", occupied_by="E1", occupied_department="Dept-A", occupied_team="Team-Z"),
+        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-Q"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-A", "Team-Q"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2]], all_seats)
+    assert assignment is not None
+    assert assignment.zone == "A"
 
 def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()

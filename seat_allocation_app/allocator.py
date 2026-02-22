@@ -49,7 +49,9 @@ class SeatAllocator:
         team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
         dept_anchor = dept_zone_counts.most_common(1)[0][0] if dept_zone_counts else None
 
-        # Hard rule: keep same-department employees in the same zone when that zone still has capacity.
+        original_candidates = list(candidate_seats)
+
+        # Prefer same-department employees in the same zone when that zone still has capacity.
         dept_locked = False
         if dept_anchor:
             dept_zone_candidates = [
@@ -69,8 +71,11 @@ class SeatAllocator:
         # Domain reduction pass 1: keep only zone-cap-valid candidates.
         candidate_seats = enforce_zone_department_cap(candidate_seats)
 
-        # Department lock remains hard: do not relax even if it empties the domain.
+        # Controlled fallback: if lock emptied domain, re-open cap-valid original domain.
         lock_relaxed = False
+        if not candidate_seats and dept_locked:
+            candidate_seats = enforce_zone_department_cap(original_candidates)
+            lock_relaxed = True
 
         if not candidate_seats:
             return None
@@ -103,7 +108,9 @@ class SeatAllocator:
         building_preferred = False
 
         preferred_floor: tuple[str, str] | None = None
-        if team_anchor:
+        if dept_locked and dept_anchor:
+            preferred_floor = (dept_anchor[0], dept_anchor[1])
+        elif team_anchor:
             preferred_floor = (team_anchor[0], team_anchor[1])
         elif dept_anchor:
             preferred_floor = (dept_anchor[0], dept_anchor[1])
@@ -132,8 +139,8 @@ class SeatAllocator:
             score += 500 if seat.team_cluster == employee.team else 0
 
             if dept_anchor and zone_key == dept_anchor:
-                score += 2_500
-            score += dept_zone_counts.get(zone_key, 0) * 350
+                score += 8_500
+            score += dept_zone_counts.get(zone_key, 0) * 600
             score += 80 if seat.department == employee.department else 0
 
             score += zone_load.get(zone_key, 0) * 14
@@ -141,7 +148,9 @@ class SeatAllocator:
             if team_anchor and zone_key[:2] != team_anchor[:2]:
                 score -= 180
             if dept_anchor and zone_key[:2] != dept_anchor[:2]:
-                score -= 75
+                score -= 220
+            if dept_anchor and zone_key != dept_anchor and available_same_dept_by_zone.get(dept_anchor, 0) > 0:
+                score -= 3_500
 
             suffix = seat.seat_id.split("-")[-1]
             if suffix.isdigit():
@@ -157,7 +166,7 @@ class SeatAllocator:
             zone_key = (seat.building, seat.floor, seat.zone)
             remaining_same_team = max(0, available_same_team_by_zone.get(zone_key, 0) - 1)
             remaining_same_dept = max(0, available_same_dept_by_zone.get(zone_key, 0) - 1)
-            return remaining_same_team * 120 + remaining_same_dept * 18
+            return remaining_same_team * 100 + remaining_same_dept * 65
 
         base_scores = {seat.seat_id: base_score(seat) for seat in candidate_seats}
         frontier = sorted(candidate_seats, key=lambda seat: base_scores[seat.seat_id], reverse=True)
@@ -174,12 +183,16 @@ class SeatAllocator:
         )
 
         selected = ranked_with_lookahead[0]
+        if dept_anchor:
+            anchored = [s for s in ranked_with_lookahead if (s.building, s.floor, s.zone) == dept_anchor]
+            if anchored and available_same_dept_by_zone.get(dept_anchor, 0) > 0:
+                selected = anchored[0]
         reasoning = (
             "Beam search scoring: team_together > dept_zone_together > utilization; "
             f"selected={selected.seat_id}; team_anchor={team_anchor}; dept_anchor={dept_anchor}; "
             f"dept_zone_lock={'on' if dept_locked else 'off'}; "
             f"dept_zone_lock_relaxed={'yes' if lock_relaxed else 'no'}; "
-            f"dept_lock_relax_mode={'dept_zone_priority' if lock_relaxed else 'n/a'}; "
+            f"dept_lock_relax_mode={'cap_valid_fallback' if lock_relaxed else 'n/a'}; "
             f"domain_reduction_floor_pref={'yes' if floor_preferred else 'no'}; "
             f"domain_reduction_building_pref={'yes' if building_preferred else 'no'}"
         )
