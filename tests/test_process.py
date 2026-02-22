@@ -142,7 +142,7 @@ def test_zone_allows_second_department() -> None:
 
 
 
-def test_domain_reduction_relaxes_dept_lock_when_zone_cap_blocks_anchor() -> None:
+def test_hard_dept_lock_returns_none_when_anchor_zone_is_cap_blocked() -> None:
     allocator = SeatAllocator()
     employee = Employee("E11", "CARD-E11", "Mia", "m@x", "+11", "Dept-A", "Team-A2")
 
@@ -155,8 +155,7 @@ def test_domain_reduction_relaxes_dept_lock_when_zone_cap_blocks_anchor() -> Non
     ]
 
     assignment = allocator.select_seat(employee, [all_seats[3], all_seats[4]], all_seats)
-    assert assignment is not None
-    assert assignment.zone == "B"
+    assert assignment is None
 
 
 def test_prefers_same_floor_before_other_floor_or_building() -> None:
@@ -232,7 +231,7 @@ def test_floor_preference_follows_current_occupied_floor_when_no_anchor() -> Non
 
 
 
-def test_relaxed_dept_lock_prioritizes_other_existing_dept_zone() -> None:
+def test_hard_dept_lock_does_not_fallback_to_other_zones() -> None:
     allocator = SeatAllocator()
     employee = Employee("E15", "CARD-E15", "Rin", "r@x", "+15", "Dept-A", "Team-A9")
 
@@ -241,7 +240,7 @@ def test_relaxed_dept_lock_prioritizes_other_existing_dept_zone() -> None:
         Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E1", occupied_department="Dept-A", occupied_team="Team-A1"),
         Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E2", occupied_department="Dept-B", occupied_team="Team-B1"),
         Seat("S-B1-F1-A-003", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E3", occupied_department="Dept-C", occupied_team="Team-C1"),
-        # Another existing Dept-A zone C should be preferred when lock relaxes.
+        # Another Dept-A zone exists, but hard lock must not fallback to it.
         Seat("S-B1-F1-C-001", "B1", "F1", "C", "Dept-A", "Team-A2", status="occupied", occupied_by="E4", occupied_department="Dept-A", occupied_team="Team-A2"),
         # Candidates
         Seat("S-B1-F1-A-010", "B1", "F1", "A", "Dept-A", "Team-A9"),
@@ -250,10 +249,7 @@ def test_relaxed_dept_lock_prioritizes_other_existing_dept_zone() -> None:
     ]
 
     assignment = allocator.select_seat(employee, [all_seats[4], all_seats[5], all_seats[6]], all_seats)
-    assert assignment is not None
-    assert assignment.zone == "C"
-    assert assignment.building == "B1"
-    assert assignment.floor == "F1"
+    assert assignment is None
 
 
 

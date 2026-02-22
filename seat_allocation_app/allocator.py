@@ -48,9 +48,6 @@ class SeatAllocator:
 
         team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
         dept_anchor = dept_zone_counts.most_common(1)[0][0] if dept_zone_counts else None
-        dept_zones_by_strength = [zone for zone, _count in dept_zone_counts.most_common()]
-
-        original_candidates = list(candidate_seats)
 
         # Hard rule: keep same-department employees in the same zone when that zone still has capacity.
         dept_locked = False
@@ -72,21 +69,8 @@ class SeatAllocator:
         # Domain reduction pass 1: keep only zone-cap-valid candidates.
         candidate_seats = enforce_zone_department_cap(candidate_seats)
 
-        # If dept-zone lock over-constrains domain, relax lock in a controlled way:
-        # prefer other zones that already host this department before global fallback.
+        # Department lock remains hard: do not relax even if it empties the domain.
         lock_relaxed = False
-        if not candidate_seats and dept_locked:
-            cap_valid_original = enforce_zone_department_cap(original_candidates)
-            prioritized_dept_zones = [
-                seat
-                for seat in cap_valid_original
-                if (seat.building, seat.floor, seat.zone) in set(dept_zones_by_strength)
-            ]
-            if prioritized_dept_zones:
-                candidate_seats = prioritized_dept_zones
-            else:
-                candidate_seats = cap_valid_original
-            lock_relaxed = True
 
         if not candidate_seats:
             return None
