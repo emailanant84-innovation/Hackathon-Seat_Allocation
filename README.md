@@ -70,7 +70,7 @@ Tabs:
 - **Seats**
 - **LIVE Seat Assignments** (live assignment stream)
 - **LIVE Assignments Ordered** (ordered by department-team map, zone, floor, building)
-- **Electrical Usage** (lights, routers, monitors, desktop CPUs, AC vents usage summary)
+- **Electrical Usage** (lights, routers, monitors, desktop CPUs, AC vents usage summary with totals and power-saving percentage)
 
 Buildings tab color behavior:
 - Occupied seats are colored by **department**.

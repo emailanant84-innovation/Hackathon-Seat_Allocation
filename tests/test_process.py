@@ -440,6 +440,36 @@ def test_gui_color_uses_occupied_department_when_present() -> None:
     )
     assert GUIOrchestrator._seat_display_department(seat) == "Department-02"
 
+
+
+def test_power_saving_percent_calculation() -> None:
+    rows = [
+        type("Row", (), {
+            "building": "B1",
+            "floor": "F1",
+            "zone": "A",
+            "lights_on": 5,
+            "routers_on": 1,
+            "monitors_on": 40,
+            "desktop_cpus_on": 40,
+            "ac_vents_on": 2,
+        })(),
+        type("Row", (), {
+            "building": "B1",
+            "floor": "F1",
+            "zone": "B",
+            "lights_on": 6,
+            "routers_on": 1,
+            "monitors_on": 50,
+            "desktop_cpus_on": 50,
+            "ac_vents_on": 3,
+        })(),
+    ]
+
+    saving = GUIOrchestrator._compute_power_saving_percent(rows, total_seats=200, zone_count=2)
+    assert saving > 0
+    assert saving < 100
+
 def test_device_usage_summary_calculation() -> None:
     seats = [
         Seat("S-B1-F1-A-001", "B1", "F1", "A", "Engineering", "Platform", status="occupied", occupied_by="E1"),

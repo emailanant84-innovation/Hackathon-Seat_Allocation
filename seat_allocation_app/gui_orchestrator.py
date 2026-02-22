@@ -35,6 +35,7 @@ class GUIOrchestrator:
         self._fit_to_page()
 
         self.latest_assignment_var = tk.StringVar(value="Waiting for first access event...")
+        self.device_summary_var = tk.StringVar(value="Totals: n/a | Power saving: n/a")
         self.live_assignment_rows: list[tuple[str, ...]] = []
 
         self._build_layout()
@@ -124,6 +125,7 @@ class GUIOrchestrator:
                 "ac_vents_on",
             ),
         )
+        ttk.Label(self.device_tab, textvariable=self.device_summary_var, foreground="#1f4e79").pack(anchor="w", padx=8, pady=6)
 
         controls = ttk.Frame(self.root)
         controls.pack(fill="x", padx=10, pady=5)
@@ -424,11 +426,47 @@ class GUIOrchestrator:
         for row in sorted(self.live_assignment_rows, key=sort_key):
             self.live_ordered_tree.insert("", "end", values=row)
 
+
+    @staticmethod
+    def _compute_power_saving_percent(rows, total_seats: int, zone_count: int) -> float:
+        active_lights = sum(row.lights_on for row in rows)
+        active_routers = sum(row.routers_on for row in rows)
+        active_monitors = sum(row.monitors_on for row in rows)
+        active_desktops = sum(row.desktop_cpus_on for row in rows)
+        active_ac_vents = sum(row.ac_vents_on for row in rows)
+
+        max_lights = zone_count * 10
+        max_routers = zone_count
+        max_monitors = total_seats
+        max_desktops = total_seats
+        max_ac_vents = zone_count * 3
+
+        active_total = active_lights + active_routers + active_monitors + active_desktops + active_ac_vents
+        max_total = max_lights + max_routers + max_monitors + max_desktops + max_ac_vents
+        if max_total == 0:
+            return 0.0
+        return max(0.0, (1 - (active_total / max_total)) * 100.0)
+
     def _refresh_device_usage_table(self, seats: list) -> None:
         for item in self.device_tree.get_children():
             self.device_tree.delete(item)
 
-        for usage in summarize_device_usage(seats):
+        rows = summarize_device_usage(seats)
+        total_occupied = 0
+        total_lights = 0
+        total_routers = 0
+        total_monitors = 0
+        total_desktops = 0
+        total_ac_vents = 0
+
+        for usage in rows:
+            total_occupied += usage.occupied_seats
+            total_lights += usage.lights_on
+            total_routers += usage.routers_on
+            total_monitors += usage.monitors_on
+            total_desktops += usage.desktop_cpus_on
+            total_ac_vents += usage.ac_vents_on
+
             self.device_tree.insert(
                 "",
                 "end",
@@ -444,6 +482,30 @@ class GUIOrchestrator:
                     usage.ac_vents_on,
                 ),
             )
+
+        self.device_tree.insert(
+            "",
+            "end",
+            values=(
+                "TOTAL",
+                "-",
+                "-",
+                total_occupied,
+                total_lights,
+                total_routers,
+                total_monitors,
+                total_desktops,
+                total_ac_vents,
+            ),
+        )
+
+        zone_count = len({(row.building, row.floor, row.zone) for row in rows})
+        power_saving = self._compute_power_saving_percent(rows, total_seats=len(seats), zone_count=zone_count)
+        self.device_summary_var.set(
+            f"Totals -> occupied={total_occupied}, lights={total_lights}, routers={total_routers}, "
+            f"monitors={total_monitors}, desktops={total_desktops}, ac_vents={total_ac_vents} | "
+            f"Power saving: {power_saving:.2f}%"
+        )
 
     def run(self) -> None:
         self.root.mainloop()
