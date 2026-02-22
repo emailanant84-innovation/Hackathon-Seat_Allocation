@@ -8,6 +8,7 @@ from seat_allocation_app.data_sources.employee_directory import EmployeeDirector
 from seat_allocation_app.data_sources.seat_inventory import SeatInventoryClient
 from seat_allocation_app.device_usage import summarize_device_usage
 from seat_allocation_app.energy_optimizer import EnergyOptimizer
+from seat_allocation_app.gui_orchestrator import GUIOrchestrator
 from seat_allocation_app.iot_client import IoTDeviceClient
 from seat_allocation_app.logging_orchestrator import LoggingOrchestrator
 from seat_allocation_app.models import AccessEvent, Employee, Seat
@@ -422,6 +423,22 @@ def test_simulation_100_events_no_misassignment() -> None:
     assert all(len(locations) == 1 for locations in team_locs.values())
     assert all(len(locations) == 1 for locations in dept_locs.values())
     assert all(len(departments) <= 2 for departments in zone_depts.values())
+
+
+
+def test_gui_color_uses_occupied_department_when_present() -> None:
+    seat = Seat(
+        "S-B1-F1-A-001",
+        "B1",
+        "F1",
+        "A",
+        "Department-01",
+        "Team-001",
+        status="occupied",
+        occupied_by="E1",
+        occupied_department="Department-02",
+    )
+    assert GUIOrchestrator._seat_display_department(seat) == "Department-02"
 
 def test_device_usage_summary_calculation() -> None:
     seats = [

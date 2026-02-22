@@ -176,6 +176,11 @@ class GUIOrchestrator:
             for idx, dept in enumerate(depts)
         }
 
+
+    @staticmethod
+    def _seat_display_department(seat) -> str:
+        return seat.occupied_department or seat.department
+
     def _on_canvas_resize(self, _event: tk.Event) -> None:
         self._refresh_building_canvas(self._last_seats_snapshot)
 
@@ -291,7 +296,7 @@ class GUIOrchestrator:
         seat_map = {
             (seat.building, seat.floor, seat.zone, int(seat.seat_id.split("-")[-1])): (
                 seat.status,
-                seat.department,
+                self._seat_display_department(seat),
             )
             for seat in seats
         }
