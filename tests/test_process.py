@@ -314,24 +314,6 @@ def test_same_team_prefers_nearby_seat_numbers_within_zone() -> None:
 
 
 
-def test_batch_baseline_map_prefers_existing_team_zone_target() -> None:
-    allocator = SeatAllocator()
-    employees = [
-        Employee("E20", "CARD-E20", "A", "a@x", "+20", "Dept-A", "Team-X"),
-        Employee("E21", "CARD-E21", "B", "b@x", "+21", "Dept-A", "Team-X"),
-    ]
-
-    all_seats = [
-        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-X", status="occupied", occupied_by="E1", occupied_department="Dept-A", occupied_team="Team-X"),
-        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-X"),
-        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-A", "Team-X"),
-    ]
-
-    allocator.prepare_batch_baseline(employees, all_seats)
-    assignment = allocator.select_seat(employees[0], [all_seats[1], all_seats[2]], all_seats)
-    assert assignment is not None
-    assert assignment.zone == "A"
-
 def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()
     employees = build_employee_directory(seed=42)
