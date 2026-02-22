@@ -7,13 +7,13 @@ It keeps employees with their teams by prioritizing team-clustered seats, then o
 
 - Buildings: 2 (`B1`, `B2`)
 - Floors per building: 2 (`F1`-`F2`)
-- Zones per floor: 3 (`A`, `B`, `C`)
-- Seats per zone: 60
-- Total capacity: 720 seats
-- Total possible departments: 10
-- Total possible teams: 25
+- Zones per floor: 2 (`A`, `B`)
+- Seats per zone: 100
+- Total capacity: 800 seats
+- Total possible departments: 8
+- Total possible teams: 20
 - Simulation employee pool: 300 employees
-- Runtime simulation scope: same 10 departments + 25 teams
+- Runtime simulation scope: same 8 departments + 20 teams
 
 ## Seat allocation algorithm
 
@@ -64,7 +64,7 @@ python main.py
 The GUI opens in fit-to-page mode by default.
 
 Tabs:
-- **Buildings** (2 floors × 3 zones/floor × 60 seat-squares/zone per building, dynamically highlighted)
+- **Buildings** (2 floors × 2 zones/floor × 100 seat-squares/zone per building, dynamically highlighted)
 - **Floors**
 - **Zones**
 - **Seats**

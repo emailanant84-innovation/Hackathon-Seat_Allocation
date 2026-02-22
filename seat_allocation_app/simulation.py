@@ -34,8 +34,8 @@ def _clone_employee(employee: Employee) -> Employee:
 
 
 # Pre-created simulation tables (single build, reused at runtime).
-DEPARTMENTS_TABLE: list[str] = [f"Department-{index:02d}" for index in range(1, 11)]
-TEAMS_TABLE: list[str] = [f"Team-{index:03d}" for index in range(1, 26)]
+DEPARTMENTS_TABLE: list[str] = [f"Department-{index:02d}" for index in range(1, 9)]
+TEAMS_TABLE: list[str] = [f"Team-{index:03d}" for index in range(1, 21)]
 TEAM_DEPARTMENT_TABLE: dict[str, str] = {
     team: DEPARTMENTS_TABLE[idx % len(DEPARTMENTS_TABLE)]
     for idx, team in enumerate(TEAMS_TABLE)
@@ -46,8 +46,8 @@ def _build_seat_table() -> list[Seat]:
     seats: list[Seat] = []
     for building in range(1, 3):
         for floor in range(1, 3):
-            for zone in ("A", "B", "C"):
-                for number in range(1, 61):
+            for zone in ("A", "B"):
+                for number in range(1, 101):
                     team = TEAMS_TABLE[
                         (number - 1 + (building - 1) * 5 + (floor - 1) * 3 + (ord(zone) - 65))
                         % len(TEAMS_TABLE)
@@ -67,8 +67,8 @@ def _build_seat_table() -> list[Seat]:
 
 def _build_employee_table(
     total_employees: int = 300,
-    active_departments: int = 10,
-    active_teams: int = 25,
+    active_departments: int = 8,
+    active_teams: int = 20,
     seed: int = 42,
 ) -> list[Employee]:
     rng = random.Random(seed)
@@ -118,14 +118,14 @@ def build_seat_topology() -> list[Seat]:
 
 def build_employee_directory(
     total_employees: int = 300,
-    active_departments: int = 10,
-    active_teams: int = 25,
+    active_departments: int = 8,
+    active_teams: int = 20,
     seed: int | None = None,
 ) -> list[Employee]:
     if (
         total_employees == 300
-        and active_departments == 10
-        and active_teams == 25
+        and active_departments == 8
+        and active_teams == 20
         and seed is None
     ):
         return [_clone_employee(employee) for employee in EMPLOYEES_TABLE]

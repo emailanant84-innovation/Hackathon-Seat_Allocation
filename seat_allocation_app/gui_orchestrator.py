@@ -55,7 +55,7 @@ class GUIOrchestrator:
 
         ttk.Label(
             header,
-            text="Real-time Seat Allocation (2 Buildings, 2 Floors, 3 Zones, 60 Seats/Zone)",
+            text="Real-time Seat Allocation (2 Buildings, 2 Floors, 2 Zones, 100 Seats/Zone)",
             font=("Arial", 14, "bold"),
         ).pack(anchor="w")
         ttk.Label(header, textvariable=self.latest_assignment_var, foreground="blue").pack(anchor="w")
@@ -312,8 +312,8 @@ class GUIOrchestrator:
                 self.building_canvas.create_text(bx0 + 40, fy0 + 10, text=floor, font=("Arial", 9, "bold"))
 
                 zone_gap = 8
-                zone_width = ((bx1 - bx0) - 32 - zone_gap * 2) / 3
-                for z_idx, zone in enumerate(("A", "B", "C")):
+                zone_width = ((bx1 - bx0) - 24 - zone_gap) / 2
+                for z_idx, zone in enumerate(("A", "B")):
                     zx0 = bx0 + 16 + z_idx * (zone_width + zone_gap)
                     zx1 = zx0 + zone_width
                     zy0 = fy0 + 20
@@ -344,12 +344,12 @@ class GUIOrchestrator:
         y1: float,
         seat_map: dict[tuple[str, str, str, int], tuple[str, str]],
     ) -> None:
-        rows = 6
+        rows = 10
         cols = 10
         sq_w = (x1 - x0) / cols
         sq_h = (y1 - y0) / rows
 
-        for seat_no in range(1, 61):
+        for seat_no in range(1, 101):
             row = (seat_no - 1) // cols
             col = (seat_no - 1) % cols
             sx0 = x0 + col * sq_w + 1
@@ -378,7 +378,7 @@ class GUIOrchestrator:
         zones = Counter((seat.building, seat.floor, seat.zone, seat.status) for seat in seats)
         for building in ("B1", "B2"):
             for floor in ("F1", "F2"):
-                for zone in ("A", "B", "C"):
+                for zone in ("A", "B"):
                     occupied = zones[(building, floor, zone, "occupied")]
                     available = zones[(building, floor, zone, "available")]
                     self.zone_tree.insert("", "end", values=(building, floor, zone, occupied, available))

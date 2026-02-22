@@ -243,16 +243,16 @@ def test_relaxed_dept_lock_falls_back_to_other_valid_dept_zone() -> None:
         Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E2", occupied_department="Dept-B", occupied_team="Team-B1"),
         Seat("S-B1-F1-A-003", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E3", occupied_department="Dept-C", occupied_team="Team-C1"),
         # Another Dept-A zone exists and should be used as fallback.
-        Seat("S-B1-F1-C-001", "B1", "F1", "C", "Dept-A", "Team-A2", status="occupied", occupied_by="E4", occupied_department="Dept-A", occupied_team="Team-A2"),
+        Seat("S-B1-F1-B-001", "B1", "F1", "B", "Dept-A", "Team-A2", status="occupied", occupied_by="E4", occupied_department="Dept-A", occupied_team="Team-A2"),
         # Candidates
         Seat("S-B1-F1-A-010", "B1", "F1", "A", "Dept-A", "Team-A9"),
-        Seat("S-B1-F1-C-010", "B1", "F1", "C", "Dept-A", "Team-A9"),
+        Seat("S-B1-F1-B-010", "B1", "F1", "B", "Dept-A", "Team-A9"),
         Seat("S-B2-F2-B-010", "B2", "F2", "B", "Dept-A", "Team-A9"),
     ]
 
     assignment = allocator.select_seat(employee, [all_seats[4], all_seats[5], all_seats[6]], all_seats)
     assert assignment is not None
-    assert assignment.zone == "C"
+    assert assignment.zone == "B"
     assert assignment.building == "B1"
     assert assignment.floor == "F1"
 
@@ -343,8 +343,8 @@ def test_simulation_uses_precreated_tables_for_defaults() -> None:
 
     seats_first = build_seat_topology()
     seats_second = build_seat_topology()
-    assert len(seats_first) == 720
-    assert len(seats_second) == 720
+    assert len(seats_first) == 800
+    assert len(seats_second) == 800
     assert seats_first[0].seat_id == seats_second[0].seat_id
     assert seats_first[0] is not seats_second[0]
 
@@ -359,12 +359,12 @@ def test_simulation_topology_and_team_department_connection() -> None:
     employees = build_employee_directory(seed=42)
     mapping = team_department_map()
 
-    assert len(seats) == 720
-    assert len({seat.department for seat in seats}) == 10
-    assert len({seat.team_cluster for seat in seats}) == 25
+    assert len(seats) == 800
+    assert len({seat.department for seat in seats}) == 8
+    assert len({seat.team_cluster for seat in seats}) == 20
 
-    assert len(all_departments()) == 10
-    assert len(all_teams()) == 25
+    assert len(all_departments()) == 8
+    assert len(all_teams()) == 20
 
     # connection between team and department is consistent in both seats and employees
     for seat in seats[:100]:
@@ -373,8 +373,8 @@ def test_simulation_topology_and_team_department_connection() -> None:
         assert mapping[employee.team] == employee.department
 
     assert len(employees) == 300
-    assert len({employee.department for employee in employees}) == 10
-    assert len({employee.team for employee in employees}) == 25
+    assert len({employee.department for employee in employees}) == 8
+    assert len({employee.team for employee in employees}) == 20
 
 
 def test_device_usage_summary_calculation() -> None:
