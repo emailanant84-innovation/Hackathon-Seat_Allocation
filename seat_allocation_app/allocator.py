@@ -9,9 +9,9 @@ from seat_allocation_app.models import Assignment, Employee, Seat
 
 @dataclass(slots=True)
 class SeatAllocator:
-    """Beam-search allocator maximizing utilization with team/department cohesion."""
+    """Hybrid CSP + heuristic best-first (beam) allocator."""
 
-    beam_width: int = 20
+    beam_width: int = 40
 
     def select_seat(
         self,
@@ -25,11 +25,17 @@ class SeatAllocator:
         occupied = [s for s in all_seats if s.status == "occupied"]
         available = [s for s in all_seats if s.status == "available"]
 
-        team_zone_counts = Counter()
-        dept_zone_counts = Counter()
-        zone_load = Counter()
-        floor_load = Counter()
         zone_departments: dict[tuple[str, str, str], set[str]] = {}
+        zone_load: Counter[tuple[str, str, str]] = Counter()
+        floor_load: Counter[tuple[str, str]] = Counter()
+        building_load: Counter[str] = Counter()
+
+        team_zone_counts: Counter[tuple[str, str, str]] = Counter()
+        dept_zone_counts: Counter[tuple[str, str, str]] = Counter()
+        team_dept_zone_counts: Counter[tuple[str, str, str]] = Counter()
+
+        team_seat_sum: Counter[tuple[str, str, str]] = Counter()
+        team_seat_count: Counter[tuple[str, str, str]] = Counter()
 
         for seat in occupied:
             zone_key = (seat.building, seat.floor, seat.zone)
@@ -37,164 +43,159 @@ class SeatAllocator:
             occupied_department = seat.occupied_department or seat.department
             occupied_team = seat.occupied_team or seat.team_cluster
 
+            zone_departments.setdefault(zone_key, set()).add(occupied_department)
             zone_load[zone_key] += 1
             floor_load[floor_key] += 1
-            zone_departments.setdefault(zone_key, set()).add(occupied_department)
+            building_load[seat.building] += 1
 
             if occupied_department == employee.department:
                 dept_zone_counts[zone_key] += 1
-                if occupied_team == employee.team:
-                    team_zone_counts[zone_key] += 1
+            if occupied_team == employee.team:
+                team_zone_counts[zone_key] += 1
+            if occupied_department == employee.department and occupied_team == employee.team:
+                team_dept_zone_counts[zone_key] += 1
+                suffix = seat.seat_id.split("-")[-1]
+                if suffix.isdigit():
+                    team_seat_sum[zone_key] += int(suffix)
+                    team_seat_count[zone_key] += 1
 
+        team_dept_anchor = team_dept_zone_counts.most_common(1)[0][0] if team_dept_zone_counts else None
         team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
         dept_anchor = dept_zone_counts.most_common(1)[0][0] if dept_zone_counts else None
 
-        original_candidates = list(candidate_seats)
+        def zone_key(seat: Seat) -> tuple[str, str, str]:
+            return (seat.building, seat.floor, seat.zone)
 
-        # Prefer same-department employees in the same zone when that zone still has capacity.
-        dept_locked = False
-        if dept_anchor:
-            dept_zone_candidates = [
-                seat for seat in candidate_seats if (seat.building, seat.floor, seat.zone) == dept_anchor
-            ]
-            if dept_zone_candidates:
-                candidate_seats = dept_zone_candidates
-                dept_locked = True
+        # -------- CSP / domain reduction (hard constraints first) --------
+        reduced = [
+            seat
+            for seat in candidate_seats
+            if len(zone_departments.get(zone_key(seat), set()) | {employee.department}) <= 2
+        ]
 
-        def enforce_zone_department_cap(seats: list[Seat]) -> list[Seat]:
-            return [
-                seat
-                for seat in seats
-                if len(zone_departments.get((seat.building, seat.floor, seat.zone), set()) | {employee.department}) <= 2
-            ]
+        if team_dept_anchor:
+            anchored = [seat for seat in reduced if zone_key(seat) == team_dept_anchor]
+            if anchored:
+                reduced = anchored
 
-        # Domain reduction pass 1: keep only zone-cap-valid candidates.
-        candidate_seats = enforce_zone_department_cap(candidate_seats)
+        if team_anchor and (not team_dept_anchor):
+            anchored = [seat for seat in reduced if zone_key(seat) == team_anchor]
+            if anchored:
+                reduced = anchored
 
-        # Controlled fallback: if lock emptied domain, re-open cap-valid original domain.
-        lock_relaxed = False
-        if not candidate_seats and dept_locked:
-            candidate_seats = enforce_zone_department_cap(original_candidates)
-            lock_relaxed = True
+        if dept_anchor and (not team_dept_anchor):
+            anchored = [seat for seat in reduced if zone_key(seat) == dept_anchor]
+            if anchored:
+                reduced = anchored
 
-        if not candidate_seats:
+        if not reduced:
             return None
 
-        # Precompute employee-specific availability maps for fast lookahead scoring.
-        available_same_team_by_zone: Counter[tuple[str, str, str]] = Counter()
-        available_same_dept_by_zone: Counter[tuple[str, str, str]] = Counter()
-        for seat in available:
-            zone_key = (seat.building, seat.floor, seat.zone)
-            if seat.department == employee.department:
-                available_same_dept_by_zone[zone_key] += 1
-                if seat.team_cluster == employee.team:
-                    available_same_team_by_zone[zone_key] += 1
-
-        team_suffix_totals_by_zone: Counter[tuple[str, str, str]] = Counter()
-        team_suffix_counts_by_zone: Counter[tuple[str, str, str]] = Counter()
-        for seat in occupied:
-            zone_key = (seat.building, seat.floor, seat.zone)
-            occupied_department = seat.occupied_department or seat.department
-            occupied_team = seat.occupied_team or seat.team_cluster
-            if occupied_department != employee.department or occupied_team != employee.team:
-                continue
-            suffix = seat.seat_id.split("-")[-1]
-            if suffix.isdigit():
-                team_suffix_totals_by_zone[zone_key] += int(suffix)
-                team_suffix_counts_by_zone[zone_key] += 1
-
-        # Domain reduction pass 2: strict floor-first, then building-first.
-        floor_preferred = False
-        building_preferred = False
-
         preferred_floor: tuple[str, str] | None = None
-        if dept_locked and dept_anchor:
-            preferred_floor = (dept_anchor[0], dept_anchor[1])
+        if team_dept_anchor:
+            preferred_floor = (team_dept_anchor[0], team_dept_anchor[1])
         elif team_anchor:
             preferred_floor = (team_anchor[0], team_anchor[1])
         elif dept_anchor:
             preferred_floor = (dept_anchor[0], dept_anchor[1])
         elif floor_load:
             preferred_floor = floor_load.most_common(1)[0][0]
-        else:
-            preferred_floor = min((seat.building, seat.floor) for seat in candidate_seats)
 
-        same_floor = [seat for seat in candidate_seats if (seat.building, seat.floor) == preferred_floor]
-        if same_floor:
-            candidate_seats = same_floor
-            floor_preferred = True
+        floor_reduced = reduced
+        if preferred_floor:
+            same_floor = [seat for seat in reduced if (seat.building, seat.floor) == preferred_floor]
+            if same_floor:
+                floor_reduced = same_floor
 
-        same_building = [seat for seat in candidate_seats if seat.building == preferred_floor[0]]
-        if same_building:
-            candidate_seats = same_building
-            building_preferred = True
+        building_reduced = floor_reduced
+        if preferred_floor:
+            same_building = [seat for seat in floor_reduced if seat.building == preferred_floor[0]]
+            if same_building:
+                building_reduced = same_building
+
+        reduced = building_reduced
+
+        available_same_team_by_zone: Counter[tuple[str, str, str]] = Counter()
+        available_same_dept_by_zone: Counter[tuple[str, str, str]] = Counter()
+        for seat in available:
+            z = zone_key(seat)
+            if seat.department == employee.department:
+                available_same_dept_by_zone[z] += 1
+                if seat.team_cluster == employee.team:
+                    available_same_team_by_zone[z] += 1
 
         def base_score(seat: Seat) -> float:
-            zone_key = (seat.building, seat.floor, seat.zone)
+            z = zone_key(seat)
             score = 0.0
 
-            if team_anchor and zone_key == team_anchor:
-                score += 10_000
-            score += team_zone_counts.get(zone_key, 0) * 1_200
-            score += 500 if seat.team_cluster == employee.team else 0
+            # Priority 1: same team+department
+            if team_dept_anchor and z == team_dept_anchor:
+                score += 20_000
 
-            if dept_anchor and zone_key == dept_anchor:
-                score += 8_500
-            score += dept_zone_counts.get(zone_key, 0) * 600
-            score += 80 if seat.department == employee.department else 0
+            # Priority 2: same team
+            if team_anchor and z == team_anchor:
+                score += 9_000
+            score += team_zone_counts.get(z, 0) * 1_100
 
-            score += zone_load.get(zone_key, 0) * 14
+            # Priority 3: same department
+            if dept_anchor and z == dept_anchor:
+                score += 8_000
+            score += dept_zone_counts.get(z, 0) * 700
 
-            if team_anchor and zone_key[:2] != team_anchor[:2]:
-                score -= 180
-            if dept_anchor and zone_key[:2] != dept_anchor[:2]:
-                score -= 220
-            if dept_anchor and zone_key != dept_anchor and available_same_dept_by_zone.get(dept_anchor, 0) > 0:
-                score -= 3_500
+            # Utilization
+            score += zone_load.get(z, 0) * 18
+            score += floor_load.get((seat.building, seat.floor), 0) * 5
+            score += building_load.get(seat.building, 0) * 2
 
+            # Prefer staying in same floor/building when anchors exist
+            if preferred_floor and (seat.building, seat.floor) != preferred_floor:
+                score -= 500
+            if preferred_floor and seat.building != preferred_floor[0]:
+                score -= 300
+
+            # Seat locality for existing team cluster
             suffix = seat.seat_id.split("-")[-1]
             if suffix.isdigit():
                 seat_num = int(suffix)
-                team_count = team_suffix_counts_by_zone.get(zone_key, 0)
-                if team_count:
-                    team_center = team_suffix_totals_by_zone[zone_key] / team_count
-                    score -= abs(seat_num - team_center) * 0.25
+                if team_seat_count.get(z, 0) > 0:
+                    center = team_seat_sum[z] / team_seat_count[z]
+                    score -= abs(seat_num - center) * 0.35
                 score -= seat_num * 0.001
+
             return score
 
         def lookahead_score(seat: Seat) -> float:
-            zone_key = (seat.building, seat.floor, seat.zone)
-            remaining_same_team = max(0, available_same_team_by_zone.get(zone_key, 0) - 1)
-            remaining_same_dept = max(0, available_same_dept_by_zone.get(zone_key, 0) - 1)
-            return remaining_same_team * 100 + remaining_same_dept * 65
+            z = zone_key(seat)
+            remaining_team = max(0, available_same_team_by_zone.get(z, 0) - 1)
+            remaining_dept = max(0, available_same_dept_by_zone.get(z, 0) - 1)
+            return remaining_team * 130 + remaining_dept * 90
 
-        base_scores = {seat.seat_id: base_score(seat) for seat in candidate_seats}
-        frontier = sorted(candidate_seats, key=lambda seat: base_scores[seat.seat_id], reverse=True)
+        base_scores = {seat.seat_id: base_score(seat) for seat in reduced}
+        frontier = sorted(reduced, key=lambda seat: base_scores[seat.seat_id], reverse=True)
         beam = frontier[: self.beam_width]
-
         if not beam:
             return None
 
         lookahead_scores = {seat.seat_id: lookahead_score(seat) for seat in beam}
-        ranked_with_lookahead = sorted(
+        ranked = sorted(
             beam,
             key=lambda seat: (base_scores[seat.seat_id] + lookahead_scores[seat.seat_id]),
             reverse=True,
         )
 
-        selected = ranked_with_lookahead[0]
+        selected = ranked[0]
+
+        # Safeguard: if dept anchor seats exist in beam and are still valid, keep anchor first.
         if dept_anchor:
-            anchored = [s for s in ranked_with_lookahead if (s.building, s.floor, s.zone) == dept_anchor]
+            anchored = [seat for seat in ranked if zone_key(seat) == dept_anchor]
             if anchored and available_same_dept_by_zone.get(dept_anchor, 0) > 0:
                 selected = anchored[0]
+
         reasoning = (
-            "Beam search scoring: team_together > dept_zone_together > utilization; "
-            f"selected={selected.seat_id}; team_anchor={team_anchor}; dept_anchor={dept_anchor}; "
-            f"dept_zone_lock={'on' if dept_locked else 'off'}; "
-            f"dept_zone_lock_relaxed={'yes' if lock_relaxed else 'no'}; "
-            f"dept_lock_relax_mode={'cap_valid_fallback' if lock_relaxed else 'n/a'}; "
-            f"domain_reduction_floor_pref={'yes' if floor_preferred else 'no'}; "
-            f"domain_reduction_building_pref={'yes' if building_preferred else 'no'}"
+            "CSP+Heuristic Beam: team_dept > team > dept > utilization; "
+            f"selected={selected.seat_id}; team_dept_anchor={team_dept_anchor}; "
+            f"team_anchor={team_anchor}; dept_anchor={dept_anchor}; "
+            f"preferred_floor={preferred_floor}; beam_width={self.beam_width}"
         )
 
         return Assignment(
