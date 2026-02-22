@@ -11,7 +11,7 @@ from seat_allocation_app.models import Assignment, Employee, Seat
 class SeatAllocator:
     """Beam-search allocator maximizing utilization with team/department cohesion."""
 
-    beam_width: int = 20
+    beam_width: int = 40
 
     def select_seat(
         self,
