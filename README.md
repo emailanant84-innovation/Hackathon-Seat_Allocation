@@ -30,6 +30,10 @@ The allocator uses a **beam-search strategy** to maximize utilization while pres
 
 ## Team ↔ Department connection in simulation
 
+Simulation maintains deterministic pre-created tables and mapping loaded once:
+- Pre-created data tables: departments, teams, team→department map, seats, and default employee directory.
+- Runtime event generation reuses those pre-created tables instead of regenerating them each event.
+
 Simulation maintains a deterministic mapping between teams and departments (`team_department_map()`):
 - Every team belongs to exactly one department.
 - Seat topology and employee generation use the same mapping.
@@ -74,7 +78,7 @@ Buildings tab color behavior:
 
 Event simulation behavior:
 - Simulation interval is **2 seconds**.
-- After every **4 to 5 events**, generator intentionally repeats an employee with the same team or same department pattern.
+- For each simulator access event, one employee is picked randomly from the already created employee directory.
 
 ## Run CLI demo
 

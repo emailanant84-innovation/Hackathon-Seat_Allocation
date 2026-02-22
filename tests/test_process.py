@@ -19,6 +19,7 @@ from seat_allocation_app.simulation import (
     all_teams,
     build_employee_directory,
     build_seat_topology,
+    random_employee_event,
     team_department_map,
 )
 
@@ -329,6 +330,29 @@ def test_prefers_anchor_zone_when_anchor_seats_still_available() -> None:
     assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2]], all_seats)
     assert assignment is not None
     assert assignment.zone == "A"
+
+
+
+def test_simulation_uses_precreated_tables_for_defaults() -> None:
+    employees_first = build_employee_directory()
+    employees_second = build_employee_directory()
+    assert len(employees_first) == 300
+    assert len(employees_second) == 300
+    assert employees_first[0].employee_id == employees_second[0].employee_id
+    assert employees_first[0] is not employees_second[0]
+
+    seats_first = build_seat_topology()
+    seats_second = build_seat_topology()
+    assert len(seats_first) == 720
+    assert len(seats_second) == 720
+    assert seats_first[0].seat_id == seats_second[0].seat_id
+    assert seats_first[0] is not seats_second[0]
+
+
+def test_random_employee_event_picks_from_existing_directory() -> None:
+    employees = build_employee_directory()
+    event = random_employee_event(employees)
+    assert any(employee.employee_id == event.employee_id for employee in employees)
 
 def test_simulation_topology_and_team_department_connection() -> None:
     seats = build_seat_topology()

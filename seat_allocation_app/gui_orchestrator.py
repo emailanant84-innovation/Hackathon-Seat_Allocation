@@ -8,6 +8,7 @@ from typing import Callable
 
 from seat_allocation_app.device_usage import summarize_device_usage
 from seat_allocation_app.process_orchestrator import ProcessOrchestrator
+from seat_allocation_app.simulation import random_employee_event
 
 
 class GUIOrchestrator:
@@ -219,25 +220,16 @@ class GUIOrchestrator:
         self._schedule_next_tick(2000)
 
     def _next_employee_id(self) -> str:
-        if self._events_since_pattern >= self._pattern_interval and self._pattern_anchor_id:
-            anchor = self._employee_by_id.get(self._pattern_anchor_id)
-            if anchor and random.choice([True, False]):
-                pool = self._ids_by_team.get(anchor.team, [self._pattern_anchor_id])
-            elif anchor:
-                pool = self._ids_by_department.get(anchor.department, [self._pattern_anchor_id])
-            else:
-                pool = self.employee_ids
-            chosen = random.choice(pool)
-            self._events_since_pattern = 0
-            self._pattern_interval = random.randint(4, 5)
-            self._pattern_anchor_id = chosen
-            return chosen
-
-        chosen = self.employee_ids[self.employee_index % len(self.employee_ids)]
-        self.employee_index += 1
-        self._events_since_pattern += 1
-        self._pattern_anchor_id = chosen
-        return chosen
+        employees = [
+            employee
+            for employee in (
+                self.process_orchestrator.employee_directory.get_employee(employee_id)
+                for employee_id in self.employee_ids
+            )
+            if employee is not None
+        ]
+        access_event = random_employee_event(employees)
+        return access_event.employee_id
 
     def inject_single_event(self) -> None:
         employee_id = self._next_employee_id()
