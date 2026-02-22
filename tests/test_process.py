@@ -377,6 +377,52 @@ def test_simulation_topology_and_team_department_connection() -> None:
     assert len({employee.team for employee in employees}) == 20
 
 
+
+
+def test_simulation_100_events_no_misassignment() -> None:
+    import random
+    from collections import defaultdict
+
+    rng = random.Random(42)
+    employees = build_employee_directory()
+
+    orchestrator = ProcessOrchestrator(
+        access_stream=AccessControlStream([]),
+        employee_directory=EmployeeDirectoryClient(employees),
+        seat_inventory=SeatInventoryClient(build_seat_topology()),
+        seat_allocator=SeatAllocator(),
+        energy_optimizer=EnergyOptimizer(),
+        iot_client=IoTDeviceClient(),
+        email_notifier=EmailNotifier(),
+        message_notifier=MessageNotifier(),
+        logger=LoggingOrchestrator("sim_100_test"),
+    )
+
+    for _ in range(100):
+        event = random_employee_event(employees, rng=rng)
+        orchestrator.access_stream.publish(event.employee_id, event.card_id)
+
+    assignments = orchestrator.run_once()
+    assert len(assignments) == 100
+
+    occupied = [seat for seat in orchestrator.seat_inventory.all_seats() if seat.status == "occupied"]
+
+    team_locs = defaultdict(set)
+    dept_locs = defaultdict(set)
+    zone_depts = defaultdict(set)
+
+    for seat in occupied:
+        department = seat.occupied_department or seat.department
+        team = seat.occupied_team or seat.team_cluster
+        loc = (seat.building, seat.floor, seat.zone)
+        team_locs[(department, team)].add(loc)
+        dept_locs[department].add(loc)
+        zone_depts[loc].add(department)
+
+    assert all(len(locations) == 1 for locations in team_locs.values())
+    assert all(len(locations) == 1 for locations in dept_locs.values())
+    assert all(len(departments) <= 2 for departments in zone_depts.values())
+
 def test_device_usage_summary_calculation() -> None:
     seats = [
         Seat("S-B1-F1-A-001", "B1", "F1", "A", "Engineering", "Platform", status="occupied", occupied_by="E1"),
