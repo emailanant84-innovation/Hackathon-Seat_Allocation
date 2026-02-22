@@ -55,9 +55,10 @@ def test_orchestrator_assigns_and_notifies() -> None:
     assignments = orchestrator.run_once()
 
     occupied = {seat.seat_id: seat.occupied_by for seat in orchestrator.seat_inventory.all_seats()}
-    assert {occupied["S1"], occupied["S2"]} == {"E1", "E2"}
+    assert occupied["S1"] == "E1"
+    assert occupied["S2"] == "E2"
     assert assignments[0].building == "B1"
-    assert "CSP+Heuristic Beam" in assignments[0].reasoning
+    assert "Beam search scoring" in assignments[0].reasoning
     assert len(orchestrator.email_notifier.sent_messages) == 2
     assert len(orchestrator.message_notifier.sent_messages) == 2
 
@@ -142,7 +143,7 @@ def test_zone_allows_second_department() -> None:
 
 
 
-def test_anchor_zone_cap_block_falls_back_to_valid_zone() -> None:
+def test_dept_lock_relaxes_when_anchor_zone_is_cap_blocked() -> None:
     allocator = SeatAllocator()
     employee = Employee("E11", "CARD-E11", "Mia", "m@x", "+11", "Dept-A", "Team-A2")
 
@@ -232,7 +233,7 @@ def test_floor_preference_follows_current_occupied_floor_when_no_anchor() -> Non
 
 
 
-def test_anchor_block_uses_valid_dept_fallback_zone() -> None:
+def test_relaxed_dept_lock_falls_back_to_other_valid_dept_zone() -> None:
     allocator = SeatAllocator()
     employee = Employee("E15", "CARD-E15", "Rin", "r@x", "+15", "Dept-A", "Team-A9")
 
@@ -331,24 +332,6 @@ def test_prefers_anchor_zone_when_anchor_seats_still_available() -> None:
     assert assignment.zone == "A"
 
 
-
-
-
-def test_same_team_and_department_never_moves_zone_when_anchor_has_capacity() -> None:
-    allocator = SeatAllocator()
-    employee = Employee("E31", "CARD-E31", "Kim", "k@x", "+31", "Dept-A", "Team-A1")
-
-    all_seats = [
-        Seat("S-B1-F1-A-001", "B1", "F1", "A", "Dept-A", "Team-A1", status="occupied", occupied_by="E1", occupied_department="Dept-A", occupied_team="Team-A1"),
-        Seat("S-B1-F1-A-002", "B1", "F1", "A", "Dept-A", "Team-A1"),
-        Seat("S-B2-F2-B-001", "B2", "F2", "B", "Dept-A", "Team-A1"),
-    ]
-
-    assignment = allocator.select_seat(employee, [all_seats[1], all_seats[2]], all_seats)
-    assert assignment is not None
-    assert assignment.building == "B1"
-    assert assignment.floor == "F1"
-    assert assignment.zone == "A"
 
 def test_simulation_uses_precreated_tables_for_defaults() -> None:
     employees_first = build_employee_directory()
