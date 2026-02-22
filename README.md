@@ -26,6 +26,7 @@ The allocator uses a **beam-search strategy** to maximize utilization while pres
 - Zone department cap: each zone can host employees from at most **2 departments** at a time, computed from actual live occupants in the zone.
 - Building/floor preference: allocator first reduces candidates to the same floor (if possible), then same building, before considering other locations.
 - Event batching: access events are processed in micro-batches of 2 and ordered by department/team inside each batch to improve locality consistency.
+- Baseline optimization: before each batch is assigned, allocator builds a baseline team→zone map using a MIP-inspired objective (compactness + cap safety) solved greedily, then applies this as an additional target during scoring.
 - Team seat ordering: within a chosen zone, scoring prefers seat numbers close to existing same-team occupied seats to avoid distant placement drift.
 
 ## Team ↔ Department connection in simulation
@@ -61,6 +62,7 @@ The GUI opens in fit-to-page mode by default.
 
 Tabs:
 - **Buildings** (2 floors × 3 zones/floor × 60 seat-squares/zone per building, dynamically highlighted)
+- Team colors: occupied seat squares are colored by team (not department) for finer-grained visualization.
 - **Floors**
 - **Zones**
 - **Seats**
@@ -69,7 +71,7 @@ Tabs:
 - **Electrical Usage** (lights, routers, monitors, desktop CPUs, AC vents usage summary)
 
 Buildings tab color behavior:
-- Occupied seats are colored by **department**.
+- Occupied seats are colored by **team**.
 - Zone-based coloring has been removed.
 
 Event simulation behavior:

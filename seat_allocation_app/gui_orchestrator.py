@@ -166,15 +166,12 @@ class GUIOrchestrator:
             self._ids_by_team.setdefault(employee.team, []).append(employee_id)
             self._ids_by_department.setdefault(employee.department, []).append(employee_id)
 
-        dept_palette = [
-            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-        ]
-        depts = sorted(self._ids_by_department.keys())
-        self._dept_colors = {
-            dept: dept_palette[idx % len(dept_palette)]
-            for idx, dept in enumerate(depts)
-        }
+        teams = sorted(self._ids_by_team.keys())
+        self._team_colors = {}
+        for idx, team in enumerate(teams):
+            # Spread colors around the hue wheel so each team gets a distinct color.
+            hue = (idx * 137) % 360
+            self._team_colors[team] = f"#{int(200 + (hue % 55)):02x}{int(90 + ((hue * 3) % 120)):02x}{int(90 + ((hue * 7) % 120)):02x}"
 
     def _on_canvas_resize(self, _event: tk.Event) -> None:
         self._refresh_building_canvas(self._last_seats_snapshot)
@@ -300,7 +297,7 @@ class GUIOrchestrator:
         seat_map = {
             (seat.building, seat.floor, seat.zone, int(seat.seat_id.split("-")[-1])): (
                 seat.status,
-                seat.department,
+                (seat.occupied_team or seat.team_cluster),
             )
             for seat in seats
         }
@@ -365,8 +362,8 @@ class GUIOrchestrator:
             sy0 = y0 + row * sq_h + 1
             sx1 = sx0 + sq_w - 2
             sy1 = sy0 + sq_h - 2
-            status, department = seat_map.get((building, floor, zone, seat_no), ("available", ""))
-            fill = self._dept_colors.get(department, "#9aa0a6") if status == "occupied" else "#e6e6e6"
+            status, team = seat_map.get((building, floor, zone, seat_no), ("available", ""))
+            fill = self._team_colors.get(team, "#9aa0a6") if status == "occupied" else "#e6e6e6"
             self.building_canvas.create_rectangle(sx0, sy0, sx1, sy1, fill=fill, outline="#c9c9c9")
 
     def _refresh_floor_table(self, seats: list) -> None:

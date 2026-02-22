@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from seat_allocation_app.models import Assignment, Employee, Seat
@@ -12,6 +12,51 @@ class SeatAllocator:
     """Beam-search allocator maximizing utilization with team/department cohesion."""
 
     beam_width: int = 20
+    _batch_team_zone_targets: dict[str, tuple[str, str, str]] = field(default_factory=dict, init=False)
+
+
+    def prepare_batch_baseline(self, employees: list[Employee], all_seats: list[Seat]) -> None:
+        """Build a baseline team->zone map before assigning seats in a batch.
+
+        Uses a mixed-integer-programming-inspired objective (compactness + constraint-safety)
+        solved greedily to avoid external solver dependencies.
+        """
+        occupied = [s for s in all_seats if s.status == "occupied"]
+        available = [s for s in all_seats if s.status == "available"]
+
+        zone_departments: dict[tuple[str, str, str], set[str]] = {}
+        zone_load: Counter[tuple[str, str, str]] = Counter()
+        for seat in occupied:
+            zone_key = (seat.building, seat.floor, seat.zone)
+            zone_load[zone_key] += 1
+            zone_departments.setdefault(zone_key, set()).add(seat.occupied_department or seat.department)
+
+        available_by_zone: Counter[tuple[str, str, str]] = Counter((s.building, s.floor, s.zone) for s in available)
+        team_counts: Counter[tuple[str, str]] = Counter((e.team, e.department) for e in employees)
+
+        targets: dict[str, tuple[str, str, str]] = {}
+        for (team, department), demand in sorted(team_counts.items(), key=lambda item: -item[1]):
+            best_zone = None
+            best_score = float("-inf")
+            for zone_key, cap in available_by_zone.items():
+                if cap <= 0:
+                    continue
+                new_depts = zone_departments.get(zone_key, set()) | {department}
+                if len(new_depts) > 2:
+                    continue
+                # baseline objective: keep teams compact and use already active zones/floors
+                score = zone_load.get(zone_key, 0) * 20 + cap * 0.5
+                if department in zone_departments.get(zone_key, set()):
+                    score += 200
+                if best_zone is None or score > best_score:
+                    best_zone = zone_key
+                    best_score = score
+            if best_zone is not None:
+                targets[team] = best_zone
+                available_by_zone[best_zone] = max(0, available_by_zone[best_zone] - demand)
+                zone_departments.setdefault(best_zone, set()).add(department)
+
+        self._batch_team_zone_targets = targets
 
     def select_seat(
         self,
@@ -49,6 +94,7 @@ class SeatAllocator:
         team_anchor = team_zone_counts.most_common(1)[0][0] if team_zone_counts else None
         dept_anchor = dept_zone_counts.most_common(1)[0][0] if dept_zone_counts else None
         dept_zones_by_strength = [zone for zone, _count in dept_zone_counts.most_common()]
+        batch_team_target = self._batch_team_zone_targets.get(employee.team)
 
         original_candidates = list(candidate_seats)
 
@@ -144,6 +190,8 @@ class SeatAllocator:
 
             if team_anchor and zone_key == team_anchor:
                 score += 10_000
+            if batch_team_target and zone_key == batch_team_target:
+                score += 3_500
             score += team_zone_counts.get(zone_key, 0) * 1_200
             score += 500 if seat.team_cluster == employee.team else 0
 
@@ -193,6 +241,7 @@ class SeatAllocator:
         reasoning = (
             "Beam search scoring: team_together > dept_zone_together > utilization; "
             f"selected={selected.seat_id}; team_anchor={team_anchor}; dept_anchor={dept_anchor}; "
+            f"batch_team_target={batch_team_target}; "
             f"dept_zone_lock={'on' if dept_locked else 'off'}; "
             f"dept_zone_lock_relaxed={'yes' if lock_relaxed else 'no'}; "
             f"dept_lock_relax_mode={'dept_zone_priority' if lock_relaxed else 'n/a'}; "

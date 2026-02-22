@@ -98,6 +98,19 @@ class ProcessOrchestrator:
                 break
 
             ordered_batch = self._order_batch(batch)
+            batch_employees = [
+                employee
+                for employee in (
+                    self.employee_directory.get_employee(event.employee_id)
+                    for event in ordered_batch
+                )
+                if employee is not None
+            ]
+            self.seat_allocator.prepare_batch_baseline(
+                batch_employees,
+                self.seat_inventory.all_seats(),
+            )
+
             for access_event in ordered_batch:
                 assignment = self.process_event(access_event)
                 if assignment:
