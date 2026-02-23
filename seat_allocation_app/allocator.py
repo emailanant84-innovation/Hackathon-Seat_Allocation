@@ -94,6 +94,7 @@ class SeatAllocator:
         team_suffix_counts_by_zone: Counter[tuple[str, str, str]] = Counter()
         team_max_suffix_by_zone: dict[tuple[str, str, str], int] = {}
         dept_team_counts_by_zone: dict[tuple[str, str, str], Counter[str]] = {}
+        zone_dept_min_suffix: dict[tuple[str, str, str], dict[str, int]] = {}
         for seat in occupied:
             zone_key = (seat.building, seat.floor, seat.zone)
             occupied_department = seat.occupied_department or seat.department
@@ -101,9 +102,15 @@ class SeatAllocator:
             if occupied_department == employee.department:
                 dept_team_counts_by_zone.setdefault(zone_key, Counter())[occupied_team] += 1
 
+            suffix = seat.seat_id.split("-")[-1]
+            if suffix.isdigit():
+                seat_num = int(suffix)
+                current_min = zone_dept_min_suffix.setdefault(zone_key, {}).get(occupied_department)
+                if current_min is None or seat_num < current_min:
+                    zone_dept_min_suffix[zone_key][occupied_department] = seat_num
+
             if occupied_department != employee.department or occupied_team != employee.team:
                 continue
-            suffix = seat.seat_id.split("-")[-1]
             if suffix.isdigit():
                 seat_num = int(suffix)
                 team_suffix_totals_by_zone[zone_key] += seat_num
@@ -136,15 +143,28 @@ class SeatAllocator:
             candidate_seats = same_building
             building_preferred = True
 
+        def preferred_department_slot(zone_key: tuple[str, str, str]) -> int | None:
+            current_depts = zone_departments.get(zone_key, set())
+            if not current_depts:
+                return 0
+
+            dept_min = zone_dept_min_suffix.get(zone_key, {})
+            if employee.department in current_depts:
+                employee_min = dept_min.get(employee.department, 1)
+                return 0 if employee_min <= 50 else 1
+
+            if len(current_depts) >= 2:
+                return None
+
+            existing_dept = next(iter(current_depts))
+            existing_min = dept_min.get(existing_dept, 1)
+            return 1 if existing_min <= 50 else 0
+
         def preferred_team_section(seat: Seat) -> tuple[int, int] | None:
             z = (seat.building, seat.floor, seat.zone)
-            current_depts = sorted(zone_departments.get(z, set()))
-            if employee.department in current_depts:
-                dept_slot = current_depts.index(employee.department)
-            else:
-                if len(current_depts) >= 2:
-                    return None
-                dept_slot = len(current_depts)
+            dept_slot = preferred_department_slot(z)
+            if dept_slot is None:
+                return None
 
             if dept_slot == 0:
                 section_ranges = [(1, 25), (26, 50)]
@@ -175,6 +195,7 @@ class SeatAllocator:
             score += 80 if seat.department == employee.department else 0
 
             score += zone_load.get(zone_key, 0) * 450
+            score += len(zone_departments.get(zone_key, set())) * 700
 
             if team_anchor and zone_key[:2] != team_anchor[:2]:
                 score -= 180
@@ -190,6 +211,12 @@ class SeatAllocator:
                 section = preferred_team_section(seat)
                 if section and section[0] <= seat_num <= section[1]:
                     score += 300
+
+                dept_slot = preferred_department_slot(zone_key)
+                if dept_slot is not None:
+                    dept_half = (1, 50) if dept_slot == 0 else (51, 100)
+                    if dept_half[0] <= seat_num <= dept_half[1]:
+                        score += 700
 
                 team_count = team_suffix_counts_by_zone.get(zone_key, 0)
                 if team_count:

@@ -367,6 +367,23 @@ def test_section_heuristic_second_department_prefers_51_to_75_range() -> None:
     assert assignment is not None
     assert assignment.seat_id == "S-B1-F1-A-055"
 
+
+
+def test_section_heuristic_keeps_department_halves_stable_in_zone_b() -> None:
+    allocator = SeatAllocator()
+
+    employee = Employee("E42", "CARD-E42", "C", "c@x", "+42", "Dept-C", "Team-C2")
+    all_seats = [
+        Seat("S-B1-F1-B-051", "B1", "F1", "B", "Dept-D", "Team-D1", status="occupied", occupied_by="E1", occupied_department="Dept-D", occupied_team="Team-D1"),
+        Seat("S-B1-F1-B-060", "B1", "F1", "B", "Dept-D", "Team-D1", status="occupied", occupied_by="E2", occupied_department="Dept-D", occupied_team="Team-D1"),
+        Seat("S-B1-F1-B-010", "B1", "F1", "B", "Dept-C", "Team-C2"),
+        Seat("S-B1-F1-B-070", "B1", "F1", "B", "Dept-C", "Team-C2"),
+    ]
+
+    assignment = allocator.select_seat(employee, [all_seats[2], all_seats[3]], all_seats)
+    assert assignment is not None
+    assert assignment.seat_id == "S-B1-F1-B-010"
+
 def test_simulation_uses_precreated_tables_for_defaults() -> None:
     employees_first = build_employee_directory()
     employees_second = build_employee_directory()
