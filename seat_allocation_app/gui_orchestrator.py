@@ -37,6 +37,9 @@ class GUIOrchestrator:
         self.latest_assignment_var = tk.StringVar(value="Waiting for first access event...")
         self.device_summary_var = tk.StringVar(value="Totals: n/a | Power saving: n/a")
         self.live_assignment_rows: list[tuple[str, ...]] = []
+        self._last_email_count = 0
+        self._last_phone_count = 0
+        self._last_iot_count = 0
 
         self._build_layout()
         self._rebuild_employee_indexes()
@@ -71,6 +74,7 @@ class GUIOrchestrator:
         self.live_tab = ttk.Frame(notebook)
         self.live_ordered_tab = ttk.Frame(notebook)
         self.device_tab = ttk.Frame(notebook)
+        self.live_comms_tab = ttk.Frame(notebook)
 
         notebook.add(self.buildings_tab, text="Buildings")
         notebook.add(self.floors_tab, text="Floors")
@@ -79,6 +83,7 @@ class GUIOrchestrator:
         notebook.add(self.live_tab, text="LIVE Seat Assignments")
         notebook.add(self.live_ordered_tab, text="LIVE Assignments Ordered")
         notebook.add(self.device_tab, text="Electrical Usage")
+        notebook.add(self.live_comms_tab, text="LIVE Communications")
 
         self.building_canvas = tk.Canvas(self.buildings_tab, bg="white")
         self.building_canvas.pack(fill="both", expand=True)
@@ -127,6 +132,11 @@ class GUIOrchestrator:
         )
         ttk.Label(self.device_tab, textvariable=self.device_summary_var, foreground="#1f4e79").pack(anchor="w", padx=8, pady=6)
 
+
+        self.email_live_list = self._create_scrolled_live_list(self.live_comms_tab, "LIVE Email Messages")
+        self.phone_live_list = self._create_scrolled_live_list(self.live_comms_tab, "LIVE Phone Messages")
+        self.iot_live_list = self._create_scrolled_live_list(self.live_comms_tab, "LIVE IoT Commands Sent")
+
         controls = ttk.Frame(self.root)
         controls.pack(fill="x", padx=10, pady=5)
         self.toggle_button = ttk.Button(controls, text="Run Simulation", command=self._toggle_running)
@@ -155,6 +165,30 @@ class GUIOrchestrator:
         container.rowconfigure(0, weight=1)
         container.columnconfigure(0, weight=1)
         return tree
+
+    def _create_scrolled_live_list(self, parent: ttk.Frame, title: str) -> tk.Listbox:
+        section = ttk.LabelFrame(parent, text=title)
+        section.pack(fill="both", expand=True, padx=8, pady=8)
+
+        list_container = ttk.Frame(section)
+        list_container.pack(fill="both", expand=True, padx=6, pady=6)
+
+        listbox = tk.Listbox(list_container, font=("Courier New", 10), activestyle="none")
+        listbox.pack(side="left", fill="both", expand=True)
+
+        scrollbar = ttk.Scrollbar(list_container, orient="vertical", command=listbox.yview)
+        scrollbar.pack(side="right", fill="y")
+        listbox.configure(yscrollcommand=scrollbar.set)
+        return listbox
+
+    @staticmethod
+    def _format_iot_command(command) -> str:
+        return (
+            f"{command.building}/{command.floor}/{command.zone} -> "
+            f"lights={command.lights_on}, routers={command.routers_on}, "
+            f"monitors={command.monitors_on}, desktops={command.desktop_cpus_on}, ac_vents={command.ac_vents_on}"
+        )
+
 
     def _rebuild_employee_indexes(self) -> None:
         self._employee_by_id = {
@@ -213,6 +247,9 @@ class GUIOrchestrator:
         self._pattern_anchor_id = None
         self._rebuild_employee_indexes()
         self.live_assignment_rows = []
+        self._last_email_count = 0
+        self._last_phone_count = 0
+        self._last_iot_count = 0
         self.latest_assignment_var.set("Simulation reset. Click Run Simulation to start demo.")
         self._refresh_views()
 
@@ -281,6 +318,7 @@ class GUIOrchestrator:
         self._refresh_live_assignment_table()
         self._refresh_live_ordered_assignment_table()
         self._refresh_device_usage_table(seats)
+        self._refresh_live_communications()
 
     def _refresh_building_canvas(self, seats: list) -> None:
         self.building_canvas.delete("all")
@@ -506,6 +544,31 @@ class GUIOrchestrator:
             f"monitors={total_monitors}, desktops={total_desktops}, ac_vents={total_ac_vents} | "
             f"Power saving: {power_saving:.2f}%"
         )
+
+    def _refresh_live_communications(self) -> None:
+        email_messages = self.process_orchestrator.email_notifier.sent_messages
+        phone_messages = self.process_orchestrator.message_notifier.sent_messages
+        iot_commands = self.process_orchestrator.iot_client.command_history
+
+        if len(email_messages) != self._last_email_count:
+            self.email_live_list.delete(0, tk.END)
+            for index, message in enumerate(reversed(email_messages), start=1):
+                self.email_live_list.insert(tk.END, f"{index:04d}. {message}")
+            self._last_email_count = len(email_messages)
+
+        if len(phone_messages) != self._last_phone_count:
+            self.phone_live_list.delete(0, tk.END)
+            for index, message in enumerate(reversed(phone_messages), start=1):
+                self.phone_live_list.insert(tk.END, f"{index:04d}. {message}")
+            self._last_phone_count = len(phone_messages)
+
+        if len(iot_commands) != self._last_iot_count:
+            self.iot_live_list.delete(0, tk.END)
+            for index, command in enumerate(reversed(iot_commands), start=1):
+                formatted = self._format_iot_command(command)
+                self.iot_live_list.insert(tk.END, f"{index:04d}. {formatted}")
+            self._last_iot_count = len(iot_commands)
+
 
     def run(self) -> None:
         self.root.mainloop()
