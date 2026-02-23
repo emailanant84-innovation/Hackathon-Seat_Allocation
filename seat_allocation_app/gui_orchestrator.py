@@ -91,6 +91,14 @@ class GUIOrchestrator:
         ).pack(anchor="w")
         ttk.Label(header, textvariable=self.latest_assignment_var, foreground="blue").pack(anchor="w")
 
+        controls = ttk.Frame(self.root)
+        controls.pack(fill="x", padx=10, pady=5)
+        self.toggle_button = ttk.Button(controls, text="Run Simulation", command=self._toggle_running)
+        self.toggle_button.pack(side="left")
+        ttk.Button(controls, text="Inject Event Now", command=self.inject_single_event).pack(side="left", padx=8)
+        ttk.Button(controls, text="Reset Simulation", command=self.reset_simulation).pack(side="left", padx=8)
+        ttk.Label(controls, text="Automatic simulation interval: 2 seconds").pack(side="left", padx=15)
+
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -164,13 +172,6 @@ class GUIOrchestrator:
         self.phone_live_list = self._create_scrolled_live_list(self.live_comms_tab, "LIVE Phone Messages")
         self.iot_live_list = self._create_scrolled_live_list(self.live_comms_tab, "LIVE IoT Commands Sent")
 
-        controls = ttk.Frame(self.root)
-        controls.pack(fill="x", padx=10, pady=5)
-        self.toggle_button = ttk.Button(controls, text="Run Simulation", command=self._toggle_running)
-        self.toggle_button.pack(side="left")
-        ttk.Button(controls, text="Inject Event Now", command=self.inject_single_event).pack(side="left", padx=8)
-        ttk.Button(controls, text="Reset Simulation", command=self.reset_simulation).pack(side="left", padx=8)
-        ttk.Label(controls, text="Automatic simulation interval: 2 seconds").pack(side="left", padx=15)
 
     def _create_table_with_scrollbar(self, parent: ttk.Frame, columns: tuple[str, ...]) -> ttk.Treeview:
         container = ttk.Frame(parent)
