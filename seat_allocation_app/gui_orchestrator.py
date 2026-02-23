@@ -31,7 +31,6 @@ class GUIOrchestrator:
 
         self.root = tk.Tk()
         self.root.title("Live Seat Allocation Control Tower")
-        self.root.geometry("1280x900")
         self._fit_to_page()
 
         self.latest_assignment_var = tk.StringVar(value="Waiting for first access event...")
@@ -46,12 +45,20 @@ class GUIOrchestrator:
         self._refresh_views()
 
     def _fit_to_page(self) -> None:
-        try:
-            self.root.state("zoomed")
-        except tk.TclError:
-            screen_w = self.root.winfo_screenwidth()
-            screen_h = self.root.winfo_screenheight()
-            self.root.geometry(f"{screen_w}x{screen_h}+0+0")
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+
+        margin_w = max(24, int(screen_w * 0.03))
+        margin_h = max(36, int(screen_h * 0.05))
+
+        window_w = max(1024, screen_w - margin_w)
+        window_h = max(700, screen_h - margin_h)
+
+        x_offset = max(0, (screen_w - window_w) // 2)
+        y_offset = max(0, (screen_h - window_h) // 2)
+
+        self.root.geometry(f"{window_w}x{window_h}+{x_offset}+{y_offset}")
+        self.root.minsize(1024, 700)
 
     def _build_layout(self) -> None:
         header = ttk.Frame(self.root)
