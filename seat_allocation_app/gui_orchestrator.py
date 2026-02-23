@@ -48,17 +48,26 @@ class GUIOrchestrator:
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
 
-        margin_w = max(24, int(screen_w * 0.03))
-        margin_h = max(36, int(screen_h * 0.05))
+        # Virtual-root dimensions can exclude reserved areas (taskbar/dock) on some platforms.
+        usable_w = min(screen_w, self.root.winfo_vrootwidth() or screen_w)
+        usable_h = min(screen_h, self.root.winfo_vrootheight() or screen_h)
 
-        window_w = max(1024, screen_w - margin_w)
-        window_h = max(700, screen_h - margin_h)
+        margin_w = max(32, int(usable_w * 0.04))
+        margin_h = max(40, int(usable_h * 0.06))
+        taskbar_reserve = max(64, int(usable_h * 0.08))
 
-        x_offset = max(0, (screen_w - window_w) // 2)
-        y_offset = max(0, (screen_h - window_h) // 2)
+        min_w, min_h = 960, 640
+        window_w = max(min_w, usable_w - margin_w)
+        window_h = max(min_h, usable_h - margin_h - taskbar_reserve)
+
+        window_w = min(window_w, usable_w)
+        window_h = min(window_h, usable_h - taskbar_reserve)
+
+        x_offset = max(0, (usable_w - window_w) // 2)
+        y_offset = max(0, (usable_h - window_h) // 2)
 
         self.root.geometry(f"{window_w}x{window_h}+{x_offset}+{y_offset}")
-        self.root.minsize(1024, 700)
+        self.root.minsize(min_w, min_h)
 
     def _build_layout(self) -> None:
         header = ttk.Frame(self.root)
