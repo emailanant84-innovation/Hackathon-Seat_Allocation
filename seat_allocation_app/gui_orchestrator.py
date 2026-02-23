@@ -37,7 +37,6 @@ class GUIOrchestrator:
         self.live_assignment_rows: list[tuple[str, ...]] = []
         self._last_email_count = 0
         self._last_phone_count = 0
-        self._last_iot_count = 0
 
         self._build_layout()
         self._fit_to_page()
@@ -170,7 +169,6 @@ class GUIOrchestrator:
 
         self.email_live_list = self._create_scrolled_live_list(self.live_comms_tab, "LIVE Email Messages")
         self.phone_live_list = self._create_scrolled_live_list(self.live_comms_tab, "LIVE Phone Messages")
-        self.iot_live_list = self._create_scrolled_live_list(self.live_comms_tab, "LIVE IoT Commands Sent")
 
 
     def _create_table_with_scrollbar(self, parent: ttk.Frame, columns: tuple[str, ...]) -> ttk.Treeview:
@@ -208,15 +206,6 @@ class GUIOrchestrator:
         scrollbar.pack(side="right", fill="y")
         listbox.configure(yscrollcommand=scrollbar.set)
         return listbox
-
-    @staticmethod
-    def _format_iot_command(command) -> str:
-        return (
-            f"{command.building}/{command.floor}/{command.zone} -> "
-            f"lights={command.lights_on}, routers={command.routers_on}, "
-            f"monitors={command.monitors_on}, desktops={command.desktop_cpus_on}, ac_vents={command.ac_vents_on}"
-        )
-
 
     def _rebuild_employee_indexes(self) -> None:
         self._employee_by_id = {
@@ -277,7 +266,6 @@ class GUIOrchestrator:
         self.live_assignment_rows = []
         self._last_email_count = 0
         self._last_phone_count = 0
-        self._last_iot_count = 0
         self.latest_assignment_var.set("Simulation reset. Click Run Simulation to start demo.")
         self._refresh_views()
 
@@ -576,8 +564,6 @@ class GUIOrchestrator:
     def _refresh_live_communications(self) -> None:
         email_messages = self.process_orchestrator.email_notifier.sent_messages
         phone_messages = self.process_orchestrator.message_notifier.sent_messages
-        iot_commands = self.process_orchestrator.iot_client.command_history
-
         if len(email_messages) != self._last_email_count:
             self.email_live_list.delete(0, tk.END)
             for index, message in enumerate(reversed(email_messages), start=1):
@@ -590,12 +576,6 @@ class GUIOrchestrator:
                 self.phone_live_list.insert(tk.END, f"{index:04d}. {message}")
             self._last_phone_count = len(phone_messages)
 
-        if len(iot_commands) != self._last_iot_count:
-            self.iot_live_list.delete(0, tk.END)
-            for index, command in enumerate(reversed(iot_commands), start=1):
-                formatted = self._format_iot_command(command)
-                self.iot_live_list.insert(tk.END, f"{index:04d}. {formatted}")
-            self._last_iot_count = len(iot_commands)
 
 
     def run(self) -> None:
