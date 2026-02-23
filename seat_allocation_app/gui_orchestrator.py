@@ -31,7 +31,6 @@ class GUIOrchestrator:
 
         self.root = tk.Tk()
         self.root.title("Live Seat Allocation Control Tower")
-        self._fit_to_page()
 
         self.latest_assignment_var = tk.StringVar(value="Waiting for first access event...")
         self.device_summary_var = tk.StringVar(value="Totals: n/a | Power saving: n/a")
@@ -41,33 +40,45 @@ class GUIOrchestrator:
         self._last_iot_count = 0
 
         self._build_layout()
+        self._fit_to_page()
         self._rebuild_employee_indexes()
         self._refresh_views()
 
     def _fit_to_page(self) -> None:
+        # Compute geometry after widgets are created so controls row stays visible.
+        self.root.update_idletasks()
+
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
 
-        # Virtual-root dimensions can exclude reserved areas (taskbar/dock) on some platforms.
+        # Virtual-root dimensions can exclude taskbar/dock area on some platforms.
         usable_w = min(screen_w, self.root.winfo_vrootwidth() or screen_w)
         usable_h = min(screen_h, self.root.winfo_vrootheight() or screen_h)
 
-        margin_w = max(32, int(usable_w * 0.04))
-        margin_h = max(40, int(usable_h * 0.06))
-        taskbar_reserve = max(64, int(usable_h * 0.08))
+        req_w = self.root.winfo_reqwidth()
+        req_h = self.root.winfo_reqheight()
+
+        side_margin = max(16, int(usable_w * 0.02))
+        top_margin = max(16, int(usable_h * 0.02))
+        taskbar_reserve = max(72, int(usable_h * 0.10))
+
+        max_w = max(720, usable_w - (2 * side_margin))
+        max_h = max(560, usable_h - top_margin - taskbar_reserve)
 
         min_w, min_h = 960, 640
-        window_w = max(min_w, usable_w - margin_w)
-        window_h = max(min_h, usable_h - margin_h - taskbar_reserve)
+        desired_w = max(min_w, req_w + 20)
+        desired_h = max(min_h, req_h + 20)
 
-        window_w = min(window_w, usable_w)
-        window_h = min(window_h, usable_h - taskbar_reserve)
+        window_w = min(desired_w, max_w)
+        window_h = min(desired_h, max_h)
 
         x_offset = max(0, (usable_w - window_w) // 2)
-        y_offset = max(0, (usable_h - window_h) // 2)
+        y_offset = max(0, max(8, (usable_h - window_h) // 2))
 
         self.root.geometry(f"{window_w}x{window_h}+{x_offset}+{y_offset}")
-        self.root.minsize(min_w, min_h)
+
+        # Keep resize floor practical but never above what can fit on current display.
+        self.root.minsize(min(min_w, max_w), min(min_h, max_h))
 
     def _build_layout(self) -> None:
         header = ttk.Frame(self.root)
